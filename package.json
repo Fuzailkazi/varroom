@@ -1,0 +1,23 @@
+{
+  "name": "varroom",
+  "private": true,
+  "type": "module",
+  "workspaces": {
+    "packages": ["apps/*", "packages/*"],
+    "catalog": {
+      "typescript": "^7.0.2",
+      "@types/bun": "^1.4.2",
+      "zod": "^4.6.5"
+    }
+  },
+  "scripts": {
+    "dev": "bun run --filter './apps/*' dev",
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun test",
+    "db:generate": "bun run --filter @varroom/db db:generate"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@varroom/db",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "db:generate": "bun --env-file=../../.env --bun prisma generate",
+    "postinstall": "bun --bun prisma generate",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "prisma": "^7.10.0",
+    "typescript": "catalog:"
+  }
+}

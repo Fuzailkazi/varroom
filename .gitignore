@@ -1,1 +1,26 @@
-*.md
+# Dependencies
+node_modules/
+
+# Secrets (the committed template is .env.example)
+.env
+.env.*
+!.env.example
+
+# Generated code (rebuilt by `bun run db:generate`)
+packages/db/src/generated/
+
+# Downloaded StatsBomb data
+.cache/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Private planning docs stay on this machine (CLAUDE.md and AGENTS.md are committed)
+docs/
+
+# OS and editor noise
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

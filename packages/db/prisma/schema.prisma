@@ -1,0 +1,11 @@
+// VAR Room database schema. No models yet: the tables arrive with
+// feature 3 (data model). The scaffold only proves the connection.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
