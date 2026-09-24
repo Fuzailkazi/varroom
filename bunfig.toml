@@ -1,0 +1,6 @@
+[test]
+# Runs once before any test file: resets the Neon `test` branch from the
+# migrations and points DATABASE_URL at it (spec 0001, "Test database reset").
+preload = ["./packages/db/src/testing/reset.ts"]
+# Integration tests make several Neon round trips each.
+timeout = 20000

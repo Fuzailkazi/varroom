@@ -1,7 +1,6 @@
-// VAR Room database schema (first migration, feature 3: data model).
-// Draft built from the engineer's original schema. Users and votes
-// arrive later: feature 6 (sign in) adds the auth tables plus username,
-// badge, and tactical IQ; feature 12 adds debate and claim votes.
+// VAR Room database schema. Feature 3 (data model) made the first
+// migration; feature 6 (sign in) added the auth tables. Votes arrive
+// with feature 12.
 // Table and column names are snake_case in the database (@@map/@map)
 // because the analytics queries are written in raw SQL.
 
@@ -146,12 +145,103 @@ model MatchEvent {
 }
 
 // --------------------------------------------------------
+// ACCOUNTS AND SESSIONS (Better Auth, feature 6, spec 0003)
+// Better Auth reads and writes these through the Prisma adapter using the
+// model and field names (prisma.user, emailVerified), so those follow its
+// schema; @@map/@map give the real tables snake_case names.
+// --------------------------------------------------------
+
+model User {
+  id              String    @id
+  email           String    @unique
+  emailVerified   Boolean   @default(false) @map("email_verified")
+  name            String // display name, 1 to 50 characters
+  image           String?
+  username        String?   @unique // stored lowercase by the username plugin
+  displayUsername String?   @map("display_username") // as the fan typed it
+  // Never set by a request: Better Auth marks these input: false.
+  role            Role      @default(USER)
+  badge           Badge     @default(SPECTATOR)
+  tacticalIqScore Int       @default(50) @map("tactical_iq_score")
+  sessions        Session[]
+  accounts        Account[]
+  debates         Debate[]
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Badge {
+  SPECTATOR
+  ASSISTANT_REF
+  CHIEF_VAR
+}
+
+// One row per signed in device. The session cookie carries the token.
+model Session {
+  id        String   @id
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// One row per way of signing in: "credential" (email or username plus
+// password, the hash lives in password) now, "google" later.
+model Account {
+  id                    String    @id
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  password              String? // hash only, never the password itself
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+// Short lived tokens behind the confirmation and password reset links.
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+// --------------------------------------------------------
 // DEBATES AND VAR REVIEWS (the agent pipeline, feature 7)
 // --------------------------------------------------------
 
 model Debate {
   id            String   @id @default(uuid()) @db.Uuid
-  authorId      String?  @map("author_id") // linked to users when sign in lands (feature 6)
+  authorId      String?  @map("author_id") // null once the author deletes their account
+  author        User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
   title         String
   thesis        String
   focusPlayerId Int?     @map("focus_player_id")

@@ -1,26 +1,22 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Server } from "node:http";
-import type { AddressInfo } from "node:net";
-import { HealthResponse } from "@varroom/shared";
-import { createApp } from "./app.ts";
+import { ErrorResponse, HealthResponse } from "@varroom/shared";
+import { startTestServer } from "./testing/server.ts";
+
+let server: Server;
+let baseUrl: string;
+beforeAll(async () => {
+  ({ server, baseUrl } = await startTestServer());
+});
+afterAll(() => server.close());
 
 describe("GET /api/health", () => {
-  let server: Server;
-  let baseUrl: string;
   const originalUrl = process.env.DATABASE_URL;
-
-  beforeAll(() => {
-    // Port 0 asks the OS for any free port.
-    server = createApp().listen(0);
-    const { port } = server.address() as AddressInfo;
-    baseUrl = `http://localhost:${port}`;
-  });
 
   afterAll(() => {
     // Assigning undefined would store the string "undefined", so delete instead.
     if (originalUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = originalUrl;
-    server.close();
   });
 
   test("answers 503 with a valid body when the database is not configured", async () => {
@@ -36,5 +32,29 @@ describe("GET /api/health", () => {
     const res = await fetch(`${baseUrl}/api/health`);
     expect(res.status).toBe(200);
     expect(HealthResponse.parse(await res.json()).database).toBe("up");
+  });
+});
+
+describe("our error shape (AC-11)", () => {
+  test("an unknown route answers 404 in the shared shape", async () => {
+    const res = await fetch(`${baseUrl}/api/nope`);
+    expect(res.status).toBe(404);
+    expect(ErrorResponse.parse(await res.json()).error.code).toBe("NOT_FOUND");
+  });
+
+  test("a malformed JSON body answers 400 in the shared shape", async () => {
+    const res = await fetch(`${baseUrl}/api/nope`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{not json",
+    });
+    expect(res.status).toBe(400);
+    expect(ErrorResponse.parse(await res.json()).error.code).toBe("INVALID_JSON");
+  });
+
+  test("GET /api/me without a session answers 401 UNAUTHENTICATED (AC-7)", async () => {
+    const res = await fetch(`${baseUrl}/api/me`);
+    expect(res.status).toBe(401);
+    expect(ErrorResponse.parse(await res.json()).error.code).toBe("UNAUTHENTICATED");
   });
 });
