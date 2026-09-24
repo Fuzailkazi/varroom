@@ -40,7 +40,7 @@ Record these through `/architect stack & architecture` instead of re-asking the 
 - **Prisma:** the Client for CRUD, and **TypedSQL** `.sql` files for analytics queries. Drizzle was rejected.
 - **Services:** an Express API that streams review progress over SSE; a React + Vite web app.
 - **Agents:** Google ADK for TypeScript (`@google/adk`) with Gemini.
-- **Data:** StatsBomb Open Data, starting with Euro 2024 and World Cup 2022. The UI must show StatsBomb attribution.
+- **Data:** no stats are imported for now. Current stats and news come from **web search at review time** (ADK `GOOGLE_SEARCH` in its own News Scout agent). StatsBomb was dropped on 2026-09-24 because it only covers past tournaments; the empty football tables are kept for a future stats API.
 
 ## Agent pipeline invariants (the core design)
 
@@ -50,4 +50,5 @@ Record these through `/architect stack & architecture` instead of re-asking the 
 - **Citations are checked:** the server validates every evidence ID the FactChecker cites. An invalid citation downgrades that claim to `insufficient_data`.
 - **The score is computed by a pure function,** not by the model. Untestable claims are excluded from the score.
 - **The LLM never writes SQL.** Tools are thin wrappers over typed `db` query functions.
-- **"False 9" isn't a StatsBomb position.** Map it to Center Forward or Secondary Striker, and infer the role from behaviour (for example, average touch depth).
+- **Web evidence is recorded by code, too:** every source the search returns (link, title, snippet) becomes a numbered evidence entry. Confidence rises when several independent sources agree; a single source gives low confidence.
+
