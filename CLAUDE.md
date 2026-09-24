@@ -20,7 +20,7 @@ This project uses the skills `/scope`, `/architect`, `/develop`, `/audit`, `/tes
 | `AGENTS.md` | `/audit` creates, `/sync` maintains | canonical context. `/audit` will migrate this file's content into `AGENTS.md` and make `CLAUDE.md` a pointer. |
 
 - **How work is organized:**
-  - Build approach is **Tracer Bullet**: slice 1 is one thin, real thread through data → agents → API → web. Later slices each thicken one strand.
+  - Build approach is **Backend first** (changed from Tracer Bullet on 2026-09-24): foundations → backend (sign in API) → agents + review API → frontend. Every backend feature must be provable from the terminal (curl, `bun test`, `bun run review`) before any web page exists.
   - Default workflow tier is **Beta**: after `/develop`, run `/check verify` and then `/test`. Sign in (#6) and production deploy (#19) are tagged `· GA`.
 - **Finding the next step:** it's the first unticked box in the scope. A bare `/scope` gives a "where was I" readout.
 
