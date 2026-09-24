@@ -1,12 +1,14 @@
 // VAR Room database schema. Feature 3 (data model) made the first
-// migration; feature 6 (sign in) added the auth tables. Votes arrive
-// with feature 12.
+// migration; feature 6 (sign in) added the auth tables; feature 27
+// (debates API, spec 0004) added the board: categories, tags, votes
+// and comments.
 // Table and column names are snake_case in the database (@@map/@map)
 // because the analytics queries are written in raw SQL.
 
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
+  previewFeatures = ["typedSql"]
 }
 
 datasource db {
@@ -152,22 +154,24 @@ model MatchEvent {
 // --------------------------------------------------------
 
 model User {
-  id              String    @id
-  email           String    @unique
-  emailVerified   Boolean   @default(false) @map("email_verified")
+  id              String       @id
+  email           String       @unique
+  emailVerified   Boolean      @default(false) @map("email_verified")
   name            String // display name, 1 to 50 characters
   image           String?
-  username        String?   @unique // stored lowercase by the username plugin
-  displayUsername String?   @map("display_username") // as the fan typed it
+  username        String?      @unique // stored lowercase by the username plugin
+  displayUsername String?      @map("display_username") // as the fan typed it
   // Never set by a request: Better Auth marks these input: false.
-  role            Role      @default(USER)
-  badge           Badge     @default(SPECTATOR)
-  tacticalIqScore Int       @default(50) @map("tactical_iq_score")
+  role            Role         @default(USER)
+  badge           Badge        @default(SPECTATOR)
+  tacticalIqScore Int          @default(50) @map("tactical_iq_score")
   sessions        Session[]
   accounts        Account[]
   debates         Debate[]
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  votes           DebateVote[]
+  comments        Comment[]
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
 
   @@map("users")
 }
@@ -239,20 +243,104 @@ model Verification {
 // --------------------------------------------------------
 
 model Debate {
-  id            String   @id @default(uuid()) @db.Uuid
-  authorId      String?  @map("author_id") // null once the author deletes their account
-  author        User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
-  title         String
-  thesis        String
-  focusPlayerId Int?     @map("focus_player_id")
-  focusPlayer   Player?  @relation(fields: [focusPlayerId], references: [id])
-  reviews       Review[]
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id               String           @id @default(uuid()) @db.Uuid
+  authorId         String?          @map("author_id") // null once the author deletes their account
+  author           User?            @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  title            String
+  thesis           String
+  categories       DebateCategory[] // 1 to 4 different values, checked by the API
+  focusPlayerId    Int?             @map("focus_player_id") // not accepted by the API yet
+  focusPlayer      Player?          @relation(fields: [focusPlayerId], references: [id])
+  // Cached counters (spec 0004). Only feature 12 (votes) and feature 22
+  // (comments) change them, always in the same transaction as the row.
+  upVotes          Int              @default(0) @map("up_votes")
+  downVotes        Int              @default(0) @map("down_votes")
+  voteScore        Int              @default(0) @map("vote_score") // up_votes - down_votes
+  commentCount     Int              @default(0) @map("comment_count")
+  // The score of the newest COMPLETE review, null if never reviewed.
+  // Only feature 25 writes it, never the model.
+  credibilityScore Int?             @map("credibility_score")
+  reviews          Review[]
+  tags             DebateTag[]
+  votes            DebateVote[]
+  comments         Comment[]
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
 
   @@index([authorId])
-  @@index([createdAt])
+  // For the New sort: newest first, id breaks ties.
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  // GIN is a Postgres index for "does this array contain X" lookups.
+  @@index([categories], type: Gin)
   @@map("debates")
+}
+
+enum DebateCategory {
+  TACTICAL
+  TRANSFER
+  PLAYER
+  OTHER
+}
+
+// Team and league tags. Filled only by the seed (prisma/seed.ts).
+model Tag {
+  id      Int         @id @default(autoincrement())
+  slug    String      @unique // e.g. "bayern-munich"
+  name    String // e.g. "Bayern Munich"
+  kind    TagKind
+  debates DebateTag[]
+
+  @@map("tags")
+}
+
+// LEAGUE also covers the UEFA cups (Champions League, Europa League).
+enum TagKind {
+  TEAM
+  LEAGUE
+}
+
+// Links a debate to a tag (a debate has 0 to 5 tags).
+model DebateTag {
+  debateId String @map("debate_id") @db.Uuid
+  tagId    Int    @map("tag_id")
+  debate   Debate @relation(fields: [debateId], references: [id], onDelete: Cascade)
+  // Restrict: a tag that is still used can't be deleted.
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Restrict)
+
+  @@id([debateId, tagId])
+  @@index([tagId])
+  @@map("debate_tags")
+}
+
+// One up (1) or down (-1) vote per fan per debate. The migration adds a
+// CHECK so the database refuses any other value. Routes come in feature 12.
+model DebateVote {
+  id        String   @id @default(uuid()) @db.Uuid
+  debateId  String   @map("debate_id") @db.Uuid
+  userId    String?  @map("user_id") // null once the voter deletes their account
+  value     Int      @db.SmallInt
+  debate    Debate   @relation(fields: [debateId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([debateId, userId])
+  @@map("debate_votes")
+}
+
+// A flat reply under a debate. No editing, so no updated_at.
+// Routes come in feature 22.
+model Comment {
+  id        String   @id @default(uuid()) @db.Uuid
+  debateId  String   @map("debate_id") @db.Uuid
+  authorId  String?  @map("author_id") // null once the author deletes their account
+  body      String // 1 to 280 characters, checked by feature 22
+  debate    Debate   @relation(fields: [debateId], references: [id], onDelete: Cascade)
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([debateId, createdAt(sort: Desc)])
+  @@map("comments")
 }
 
 // One VAR check of a debate. Kept apart from Debate so a debate can be

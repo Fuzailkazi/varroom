@@ -53,6 +53,18 @@ if (!testUrl) {
     throw new Error("Resetting the test database failed:\n" + result.stderr.toString());
   }
 
+  // Fill the tags again (spec 0004): posting a debate needs real tag slugs.
+  const seed = Bun.spawnSync(["bun", "prisma/seed.ts"], {
+    cwd: dbFolder,
+    env: { ...process.env, DATABASE_URL: testUrl },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  if (seed.exitCode !== 0) {
+    throw new Error("Seeding the test database failed:\n" + seed.stderr.toString());
+  }
+
   // From now on, the app and the tests talk to the test database.
   process.env.DATABASE_URL = testUrl;
   process.env.DIRECT_DATABASE_URL = testUrl;

@@ -4,6 +4,10 @@ import { defineConfig } from "prisma/config";
 // through the driver adapter in src/client.ts instead.
 export default defineConfig({
   schema: "prisma/schema.prisma",
+  migrations: {
+    // `prisma db seed` runs this. `bun run db:seed` does the same.
+    seed: "bun prisma/seed.ts",
+  },
   datasource: {
     // Migrations need a direct (not pooled) Neon connection, because the
     // pooler cannot hold the lock a migration takes. `prisma generate` needs

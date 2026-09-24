@@ -6,8 +6,10 @@ import { HealthResponse, MeResponse } from "@varroom/shared";
 import { createAuth } from "./auth/auth.ts";
 import { createSendEmail } from "./auth/email.ts";
 import { requireSession, requireVerified } from "./auth/guards.ts";
+import { createDebatesRouter, listTagsHandler } from "./debates/routes.ts";
 import type { Env } from "./env.ts";
 import { errorHandler, sendError } from "./errors.ts";
+import { getTrustedOrigins, requireTrustedOrigin } from "./security/origin.ts";
 
 // Builds the Express app without starting it, so tests can run it on a
 // random port. server.ts is the only file that calls listen().
@@ -25,11 +27,20 @@ export function createApp(env: Env) {
   app.locals.auth = auth; // the guards read it from here
   app.all("/api/auth/*splat", toNodeHandler(auth));
 
+  // Every write to our own routes (POST, PUT, PATCH, DELETE) must come from
+  // our site and carry JSON (spec 0004, AC-3). It runs before express.json()
+  // so a bad origin is refused before the body is read.
+  app.use("/api", requireTrustedOrigin(getTrustedOrigins(env)));
+
   // From here on, JSON request bodies are parsed into req.body.
   app.use(express.json());
 
   app.get("/api/health", healthHandler);
   app.get("/api/me", requireSession, meHandler);
+
+  // The board (spec 0004).
+  app.use("/api/debates", createDebatesRouter());
+  app.get("/api/tags", listTagsHandler);
 
   // AC-4: a stand in for the real write routes (posting, voting) until
   // they exist. Only added while running tests.

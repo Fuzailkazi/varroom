@@ -19,7 +19,8 @@
     "test": "bun test",
     "db:generate": "bun run --filter @varroom/db db:generate",
     "db:migrate": "bun run --filter @varroom/db db:migrate",
-    "db:studio": "bun run --filter @varroom/db db:studio"
+    "db:studio": "bun run --filter @varroom/db db:studio",
+    "db:seed": "bun run --filter @varroom/db db:seed"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

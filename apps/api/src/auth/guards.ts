@@ -47,6 +47,14 @@ async function getSignedIn(req: Request): Promise<SignedIn | null> {
   return session;
 }
 
+// For public read routes (spec 0004, AC-10): never refuses anyone.
+// If the request has a valid session, req.signedIn is set, so the route
+// can show extras like "my vote". Without one, req.signedIn stays empty.
+export async function optionalSession(req: Request, _res: Response, next: NextFunction) {
+  await getSignedIn(req);
+  next();
+}
+
 // Lets the request through only if the fan is signed in.
 export async function requireSession(req: Request, res: Response, next: NextFunction) {
   const signedIn = await getSignedIn(req);

@@ -45,7 +45,8 @@ describe("our error shape (AC-11)", () => {
   test("a malformed JSON body answers 400 in the shared shape", async () => {
     const res = await fetch(`${baseUrl}/api/nope`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Write requests must come from our own site (spec 0004, AC-3).
+      headers: { "Content-Type": "application/json", Origin: baseUrl },
       body: "{not json",
     });
     expect(res.status).toBe(400);

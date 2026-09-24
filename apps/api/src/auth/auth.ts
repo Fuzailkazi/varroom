@@ -4,6 +4,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { username } from "better-auth/plugins";
 import { prisma } from "@varroom/db/client";
 import type { Env } from "../env.ts";
+import { getTrustedOrigins } from "../security/origin.ts";
 import type { SendEmail } from "./email.ts";
 
 // Better Auth does the hard parts of sign in for us: sign up, sign in,
@@ -113,15 +114,12 @@ export function createAuth(env: Env, sendEmail: SendEmail) {
   // AC-9: at most 10 requests per minute from one IP address.
   const tenPerMinute = { window: 60, max: 10 };
 
-  // Only requests from our own site may use a session cookie (CSRF protection).
-  // new URL("http://localhost:3001/anything").origin is "http://localhost:3001".
-  const ourOrigin = new URL(env.BETTER_AUTH_URL).origin;
-
   return betterAuth({
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     basePath: "/api/auth",
-    trustedOrigins: [ourOrigin],
+    // Only requests from our own site may use a session cookie (CSRF protection).
+    trustedOrigins: getTrustedOrigins(env),
     database: prismaAdapter(prisma, { provider: "postgresql" }),
 
     // Hide Better Auth's warnings during tests, they are expected there.

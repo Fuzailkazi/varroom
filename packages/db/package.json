@@ -4,13 +4,15 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./seed": "./prisma/seed.ts"
   },
   "scripts": {
-    "db:generate": "bun --env-file=../../.env --bun prisma generate",
+    "db:generate": "bun --env-file=../../.env scripts/generate.ts",
     "db:migrate": "bun --env-file=../../.env --bun prisma migrate dev",
     "db:studio": "bun --env-file=../../.env --bun prisma studio",
-    "postinstall": "bun --bun prisma generate",
+    "db:seed": "bun --env-file=../../.env prisma/seed.ts",
+    "postinstall": "bun --env-file=../../.env scripts/generate.ts",
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
