@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "workspaces": {
-    "packages": ["apps/*", "packages/*"],
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
     "catalog": {
       "typescript": "^7.0.2",
       "@types/bun": "^1.4.2",
@@ -14,7 +17,9 @@
     "dev": "bun run --filter './apps/*' dev",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun test",
-    "db:generate": "bun run --filter @varroom/db db:generate"
+    "db:generate": "bun run --filter @varroom/db db:generate",
+    "db:migrate": "bun run --filter @varroom/db db:migrate",
+    "db:studio": "bun run --filter @varroom/db db:studio"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

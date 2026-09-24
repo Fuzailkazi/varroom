@@ -1,5 +1,9 @@
-// VAR Room database schema. No models yet: the tables arrive with
-// feature 3 (data model). The scaffold only proves the connection.
+// VAR Room database schema (first migration, feature 3: data model).
+// Draft built from the engineer's original schema. Users and votes
+// arrive later: feature 6 (sign in) adds the auth tables plus username,
+// badge, and tactical IQ; feature 12 adds debate and claim votes.
+// Table and column names are snake_case in the database (@@map/@map)
+// because the analytics queries are written in raw SQL.
 
 generator client {
   provider = "prisma-client"
@@ -8,4 +12,277 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// --------------------------------------------------------
+// FOOTBALL DATA (loaded from StatsBomb open data, feature 4)
+// Ids are StatsBomb's own ids, so a second import updates rows
+// instead of duplicating them.
+// --------------------------------------------------------
+
+model Competition {
+  id              Int      @id // StatsBomb competition_id, e.g. 55 = UEFA Euro
+  name            String
+  countryName     String   @map("country_name")
+  gender          String
+  isInternational Boolean  @map("is_international")
+  seasons         Season[]
+
+  @@map("competitions")
+}
+
+// StatsBomb reuses a season id across competitions (282 = 2024 for both
+// the Euro and Copa America), so a season is keyed by both ids together.
+model Season {
+  competitionId Int         @map("competition_id")
+  seasonId      Int         @map("season_id")
+  name          String // "2024", "2023/2024"
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  matches       Match[]
+
+  @@id([competitionId, seasonId])
+  @@map("seasons")
+}
+
+model Team {
+  id          Int              @id // StatsBomb team_id
+  name        String
+  homeMatches Match[]          @relation("HomeTeam")
+  awayMatches Match[]          @relation("AwayTeam")
+  positions   PlayerPosition[]
+  events      MatchEvent[]
+
+  @@map("teams")
+}
+
+model Player {
+  id          Int              @id // StatsBomb player_id (names are NOT unique)
+  name        String
+  nickname    String? // the short name fans use, e.g. "Jude Bellingham"
+  countryName String?          @map("country_name")
+  positions   PlayerPosition[]
+  events      MatchEvent[]
+  debates     Debate[]
+
+  @@index([name])
+  @@map("players")
+}
+
+model Match {
+  id            Int              @id // StatsBomb match_id
+  competitionId Int              @map("competition_id")
+  seasonId      Int              @map("season_id")
+  matchDate     DateTime         @map("match_date") @db.Date
+  stage         String? // "Group Stage", "Final"
+  homeTeamId    Int              @map("home_team_id")
+  awayTeamId    Int              @map("away_team_id")
+  homeScore     Int              @map("home_score")
+  awayScore     Int              @map("away_score")
+  season        Season           @relation(fields: [competitionId, seasonId], references: [competitionId, seasonId], onDelete: Cascade)
+  homeTeam      Team             @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam      Team             @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  positions     PlayerPosition[]
+  events        MatchEvent[]
+
+  @@index([competitionId, seasonId])
+  @@map("matches")
+}
+
+// One row per stint a player spent in one position in one match. This is
+// what makes "Bellingham as a 9 vs as an 8" answerable: minutes (and so
+// per 90 stats) can be split by position. A player moved from CM to CF at
+// minute 60 has two rows.
+model PlayerPosition {
+  id         Int    @id @default(autoincrement())
+  matchId    Int    @map("match_id")
+  playerId   Int    @map("player_id")
+  teamId     Int    @map("team_id")
+  position   String // StatsBomb position name, e.g. "Center Forward"
+  positionId Int    @map("position_id") // StatsBomb position id, 1 to 25
+  fromMinute Int    @map("from_minute")
+  toMinute   Int?   @map("to_minute") // null = until the final whistle
+  match      Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player     Player @relation(fields: [playerId], references: [id])
+  team       Team   @relation(fields: [teamId], references: [id])
+
+  @@index([playerId, position])
+  @@index([matchId])
+  @@map("player_positions")
+}
+
+// Every on ball and off ball action. StatsBomb has about 35 event types
+// (Pass, Shot, Carry, Pressure, Duel, Interception, Ball Recovery, ...), so
+// the type is stored as text rather than a short enum that would miss the
+// defensive actions. Coordinates keep StatsBomb's 120 x 80 pitch; the UI
+// converts when drawing. Zones are computed in SQL from x and y.
+model MatchEvent {
+  id            String  @id @db.Uuid // StatsBomb event id
+  matchId       Int     @map("match_id")
+  index         Int // order of the event within the match
+  period        Int // 1, 2, 3 and 4 for extra time, 5 for penalties
+  minute        Int
+  second        Int
+  type          String // "Pass", "Shot", "Pressure", ...
+  teamId        Int     @map("team_id")
+  playerId      Int?    @map("player_id") // null for team events like Half Start
+  position      String? // the player's position at that moment
+  x             Float? // 0 to 120, own goal to opponent goal
+  y             Float? // 0 to 80
+  endX          Float?  @map("end_x") // passes, carries, shots
+  endY          Float?  @map("end_y")
+  outcome       String? // e.g. "Incomplete"; null means successful for passes
+  underPressure Boolean @default(false) @map("under_pressure")
+  isProgressive Boolean @default(false) @map("is_progressive") // set at import, rule in metrics.ts
+  xg            Float? // shots only (StatsBomb xG)
+  details       Json? // small extras only (e.g. pass height, shot technique), never the raw event
+  match         Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team          Team    @relation(fields: [teamId], references: [id])
+  player        Player? @relation(fields: [playerId], references: [id])
+
+  @@unique([matchId, index])
+  @@index([playerId, type])
+  @@index([matchId, teamId])
+  @@map("match_events")
+}
+
+// --------------------------------------------------------
+// DEBATES AND VAR REVIEWS (the agent pipeline, feature 7)
+// --------------------------------------------------------
+
+model Debate {
+  id            String   @id @default(uuid()) @db.Uuid
+  authorId      String?  @map("author_id") // linked to users when sign in lands (feature 6)
+  title         String
+  thesis        String
+  focusPlayerId Int?     @map("focus_player_id")
+  focusPlayer   Player?  @relation(fields: [focusPlayerId], references: [id])
+  reviews       Review[]
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([authorId])
+  @@index([createdAt])
+  @@map("debates")
+}
+
+// One VAR check of a debate. Kept apart from Debate so a debate can be
+// reviewed again, and so progress (status) is separate from the result
+// (decision).
+model Review {
+  id               String        @id @default(uuid()) @db.Uuid
+  debateId         String        @map("debate_id") @db.Uuid
+  status           ReviewStatus  @default(QUEUED)
+  decision         VarDecision?
+  credibilityScore Int?          @map("credibility_score") // 0 to 100, computed by code
+  summary          String?
+  failureReason    String?       @map("failure_reason")
+  model            String? // Gemini model id used
+  inputTokens      Int           @default(0) @map("input_tokens")
+  outputTokens     Int           @default(0) @map("output_tokens")
+  costUsd          Decimal?      @map("cost_usd") @db.Decimal(10, 6)
+  debate           Debate        @relation(fields: [debateId], references: [id], onDelete: Cascade)
+  claims           Claim[]
+  evidence         Evidence[]
+  events           ReviewEvent[]
+  createdAt        DateTime      @default(now()) @map("created_at")
+  startedAt        DateTime?     @map("started_at")
+  completedAt      DateTime?     @map("completed_at")
+
+  @@index([debateId])
+  @@index([status])
+  @@map("reviews")
+}
+
+enum ReviewStatus {
+  QUEUED
+  RUNNING
+  COMPLETE
+  FAILED
+}
+
+// Shown in the UI as: Decision stands, Overturned, Check incomplete.
+enum VarDecision {
+  CONFIRMED
+  OVERTURNED
+  INCONCLUSIVE
+}
+
+// Saved progress, so the live stream can replay after a reload.
+// The id doubles as the stream's event id (Last-Event-ID).
+model ReviewEvent {
+  id        BigInt   @id @default(autoincrement())
+  reviewId  String   @map("review_id") @db.Uuid
+  seq       Int // 1, 2, 3 ... within the review
+  type      String // claims_extracted, tool_called, evidence_added, verdict_ready, failed
+  payload   Json
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([reviewId, seq])
+  @@map("review_events")
+}
+
+model Claim {
+  id              String          @id @default(uuid()) @db.Uuid
+  reviewId        String          @map("review_id") @db.Uuid
+  order           Int // position of the claim within the debate
+  claimText       String          @map("claim_text")
+  type            ClaimType
+  entities        Json // players, teams, positions the claim mentions
+  metricEvaluated String?         @map("metric_evaluated") // e.g. "progressive_carries"
+  verdict         ClaimVerdict    @default(PENDING)
+  confidence      Float? // 0 to 1
+  reasoning       String?
+  review          Review          @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  citations       ClaimEvidence[]
+
+  @@unique([reviewId, order])
+  @@map("claims")
+}
+
+enum ClaimType {
+  COMPARISON
+  POSITIONAL_ROLE
+  TEAM_TACTIC
+  TRANSFER_FIT
+  UNTESTABLE
+}
+
+enum ClaimVerdict {
+  PENDING
+  VERIFIED
+  PARTIALLY_TRUE
+  REFUTED
+  INSUFFICIENT_DATA
+}
+
+// The evidence ledger: one row per real tool result the Stats Specialist
+// got, written by code (never by the model). Labels are E1, E2, ...
+model Evidence {
+  id        String          @id @default(uuid()) @db.Uuid
+  reviewId  String          @map("review_id") @db.Uuid
+  label     String // "E1", "E2", ...
+  toolName  String          @map("tool_name")
+  args      Json
+  result    Json
+  lowSample Boolean         @default(false) @map("low_sample") // fewer than 90 minutes behind it
+  error     String? // the tool failed; the claim cannot rest on it
+  review    Review          @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  citedBy   ClaimEvidence[]
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  @@unique([reviewId, label])
+  @@map("evidence")
+}
+
+// Which evidence each claim's verdict cites. The server checks every
+// citation belongs to the same review before accepting a verdict.
+model ClaimEvidence {
+  claimId    String   @map("claim_id") @db.Uuid
+  evidenceId String   @map("evidence_id") @db.Uuid
+  claim      Claim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  evidence   Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@id([claimId, evidenceId])
+  @@map("claim_evidence")
 }

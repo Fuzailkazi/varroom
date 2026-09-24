@@ -5,8 +5,9 @@ import { defineConfig } from "prisma/config";
 export default defineConfig({
   schema: "prisma/schema.prisma",
   datasource: {
-    // `prisma generate` needs no database, so an empty URL is fine until
-    // .env exists. Migrations (feature 3) switch this to DIRECT_DATABASE_URL.
-    url: process.env.DATABASE_URL ?? "",
+    // Migrations need a direct (not pooled) Neon connection, because the
+    // pooler cannot hold the lock a migration takes. `prisma generate` needs
+    // no database at all, so an empty URL is fine before .env exists.
+    url: process.env.DIRECT_DATABASE_URL ?? "",
   },
 });

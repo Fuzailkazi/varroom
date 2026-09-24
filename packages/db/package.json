@@ -8,6 +8,8 @@
   },
   "scripts": {
     "db:generate": "bun --env-file=../../.env --bun prisma generate",
+    "db:migrate": "bun --env-file=../../.env --bun prisma migrate dev",
+    "db:studio": "bun --env-file=../../.env --bun prisma studio",
     "postinstall": "bun --bun prisma generate",
     "typecheck": "tsc --noEmit -p ."
   },
