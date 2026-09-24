@@ -1,16 +1,13 @@
--- One page of debate ids for the New sort (spec 0004, AC-6 to AC-8).
--- Newest first; the id breaks ties between debates posted in the same ms.
---
--- Every filter is optional: when a param is null, its line lets every row through.
--- Paging: we pass the id of the last debate on the previous page (the cursor)
--- and only keep rows that sort after it. ORDER BY and the cursor comparison
--- MUST list the same columns in the same order, or pages repeat or skip rows.
+-- one page of debate ids, newest first (id breaks ties).
+-- filters are optional: null param = no filter.
+-- cursor = last id of the previous page, we only keep rows after it.
+-- ORDER BY and the cursor row comparison must use the same columns in the same order
 --
 -- @param {String} $1:category? uppercase, e.g. TRANSFER
--- @param {String} $2:tag? a tag slug, e.g. arsenal
--- @param {String} $3:author? a lowercase username
--- @param {String} $4:cursorId? the last debate id of the previous page
--- @param {Int} $5:limit how many rows to return
+-- @param {String} $2:tag? tag slug, e.g. arsenal
+-- @param {String} $3:author? lowercase username
+-- @param {String} $4:cursorId? last debate id of the previous page
+-- @param {Int} $5:limit rows to return
 SELECT d.id
 FROM debates d
 LEFT JOIN users u ON u.id = d.author_id

@@ -5,7 +5,6 @@ import type { Env } from "../env.ts";
 //   test        -> the email is saved in a list, so tests can read it
 //   development -> the link is printed in your terminal
 //   production  -> the email is really sent, through Resend
-// See spec 0003, "Value sourcing: emails".
 
 export type Email = {
   to: string;

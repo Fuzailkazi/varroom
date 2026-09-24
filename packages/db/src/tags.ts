@@ -7,9 +7,8 @@ export type TagRow = {
   kind: "TEAM" | "LEAGUE";
 };
 
-// Leagues first, then teams, each A to Z by name (spec 0004).
-// We sort in code because Postgres sorts an enum in the order it was
-// declared (TEAM before LEAGUE), which is the wrong way round here.
+// leagues first, then teams, a-z. sorted in code because postgres orders
+// enums by declaration (TEAM before LEAGUE), which is backwards for us
 export function sortTags<T extends { name: string; kind: "TEAM" | "LEAGUE" }>(tags: T[]): T[] {
   const leagues: T[] = [];
   const teams: T[] = [];
@@ -26,7 +25,7 @@ export function sortTags<T extends { name: string; kind: "TEAM" | "LEAGUE" }>(ta
   return [...leagues, ...teams];
 }
 
-// GET /api/tags. kind is optional; without it we return every tag.
+// all tags, or just one kind
 export async function listTags(kind?: "TEAM" | "LEAGUE"): Promise<TagRow[]> {
   const tags = await prisma.tag.findMany({
     where: { kind: kind },
@@ -34,8 +33,7 @@ export async function listTags(kind?: "TEAM" | "LEAGUE"): Promise<TagRow[]> {
   return sortTags(tags);
 }
 
-// The tags with these slugs. Slugs that don't exist are simply missing
-// from the result, so the caller can tell which ones were unknown.
+// tags for these slugs. unknown slugs are just missing from the result
 export function findTagsBySlugs(slugs: string[]): Promise<TagRow[]> {
   return prisma.tag.findMany({
     where: { slug: { in: slugs } },

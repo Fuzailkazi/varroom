@@ -1,10 +1,6 @@
-// Generates the Prisma Client, plus the TypedSQL query types (prisma/sql/*.sql).
-//
-// Why a script: `prisma generate` on its own DELETES the TypedSQL types,
-// and `prisma generate --sql` needs a database connection to read the
-// column types. So we add --sql whenever a database URL is set, and warn
-// when it is not (for example a fresh clone before .env exists).
-// Both `bun install` (postinstall) and `bun run db:generate` run this.
+// prisma generate wrapper. plain `prisma generate` wipes the typedsql types,
+// and `--sql` needs a db connection. so we add --sql only when a db url is set
+// (fresh clones without .env still work). used by postinstall and db:generate
 
 const hasDatabase = Boolean(process.env.DIRECT_DATABASE_URL);
 

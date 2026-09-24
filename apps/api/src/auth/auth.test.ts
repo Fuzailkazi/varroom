@@ -11,7 +11,7 @@ import { createAuth } from "./auth.ts";
 import { getLastEmail } from "./email.ts";
 import { requireRole } from "./guards.ts";
 
-// Integration tests for sign in (spec 0003). They run against the Neon
+// Integration tests for sign in. They run against the Neon
 // `test` branch, which the test preload wipes before every run.
 // Without DATABASE_URL_TEST in .env, they are skipped.
 
@@ -32,9 +32,7 @@ afterAll(() => {
   if (server) server.close();
 });
 
-// ---------------------------------------------------------------
-// Small helpers so the tests below stay short
-// ---------------------------------------------------------------
+// small helpers so the tests below stay short
 
 // Sign up details, plus any extra fields a test wants to send.
 type SignUpBody = ReturnType<typeof newFanDetails> & Record<string, unknown>;
@@ -87,12 +85,10 @@ function randomMissingEmail() {
   return `nobody.${newFanDetails().tag}@test.varroom.dev`;
 }
 
-// ---------------------------------------------------------------
-// The tests
-// ---------------------------------------------------------------
+// the tests
 
-describe.skipIf(!hasTestDatabase)("sign in (spec 0003)", () => {
-  describe("sign up, confirm, then write (AC-1, AC-4, AC-7)", () => {
+describe.skipIf(!hasTestDatabase)("sign in", () => {
+  describe("sign up, confirm, then write", () => {
     test("a new fan is signed in, unconfirmed, and unlocked by the email link", async () => {
       const fan = new Fan(baseUrl);
       const details = newFanDetails();
@@ -129,7 +125,7 @@ describe.skipIf(!hasTestDatabase)("sign in (spec 0003)", () => {
       expect(after.profile?.emailVerified).toBe(true);
     });
 
-    test("a verified only route answers 401 in our error shape without a session (AC-11)", async () => {
+    test("a verified only route answers 401 in our error shape without a session", async () => {
       const stranger = new Fan(baseUrl);
       const response = await stranger.call("/api/_test/verified-ping", { body: {} });
       expect(response.status).toBe(401);
@@ -137,7 +133,7 @@ describe.skipIf(!hasTestDatabase)("sign in (spec 0003)", () => {
     });
   });
 
-  describe("sign up rules (AC-1)", () => {
+  describe("sign up rules", () => {
     test("refuses an empty display name", async () => {
       const { response } = await signUp(new Fan(baseUrl), { ...newFanDetails(), name: "   " });
       expect(response.status).toBe(400);
@@ -169,7 +165,7 @@ describe.skipIf(!hasTestDatabase)("sign in (spec 0003)", () => {
     });
   });
 
-  describe("usernames (AC-3)", () => {
+  describe("usernames", () => {
     test("names that differ only in letter case count as the same name", async () => {
       const tag = newFanDetails().tag;
 
@@ -219,7 +215,7 @@ describe.skipIf(!hasTestDatabase)("sign in (spec 0003)", () => {
     });
   });
 
-  describe("signing in (AC-2)", () => {
+  describe("signing in", () => {
     test("works with email plus password", async () => {
       const { details } = await signUp(new Fan(baseUrl));
 
@@ -261,7 +257,7 @@ describe.skipIf(!hasTestDatabase)("sign in (spec 0003)", () => {
     });
   });
 
-  describe("fields only the server may set (AC-7)", () => {
+  describe("fields only the server may set", () => {
     test("sign up ignores role, badge and tactical IQ sent in the body", async () => {
       const fan = new Fan(baseUrl);
       await signUp(fan, { ...newFanDetails(), role: "ADMIN", badge: "CHIEF_VAR", tacticalIqScore: 100 });
@@ -284,7 +280,7 @@ describe.skipIf(!hasTestDatabase)("sign in (spec 0003)", () => {
     });
   });
 
-  describe("sessions (AC-6)", () => {
+  describe("sessions", () => {
     // Finds the session row of the fan with this email (they have one).
     function findSession(email: string) {
       return prisma.session.findFirstOrThrow({ where: { user: { email: email } } });
@@ -365,7 +361,7 @@ describe.skipIf(!hasTestDatabase)("sign in (spec 0003)", () => {
     });
   });
 
-  describe("confirmation email again, and password reset (AC-5)", () => {
+  describe("confirmation email again, and password reset", () => {
     test("a fan can ask for the confirmation link again", async () => {
       const fan = new Fan(baseUrl);
       const { details } = await signUp(fan);
@@ -409,7 +405,7 @@ describe.skipIf(!hasTestDatabase)("sign in (spec 0003)", () => {
     });
   });
 
-  describe("deleting an account (AC-8)", () => {
+  describe("deleting an account", () => {
     test("needs the right password, then removes the user but keeps their debates", async () => {
       const fan = new Fan(baseUrl);
       const { details } = await signUp(fan);
@@ -443,7 +439,7 @@ describe.skipIf(!hasTestDatabase)("sign in (spec 0003)", () => {
     });
   });
 
-  describe("rate limits (AC-9)", () => {
+  describe("rate limits", () => {
     test("the 11th sign in attempt within a minute from one IP answers 429", async () => {
       const fan = new Fan(baseUrl);
       const email = randomMissingEmail();

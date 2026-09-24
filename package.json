@@ -16,7 +16,7 @@
   "scripts": {
     "dev": "bun run --filter './apps/*' dev",
     "typecheck": "bun run --filter '*' typecheck",
-    "test": "bun test",
+    "test": "bun --env-file=.env test --timeout 20000",
     "db:generate": "bun run --filter @varroom/db db:generate",
     "db:migrate": "bun run --filter @varroom/db db:migrate",
     "db:studio": "bun run --filter @varroom/db db:studio",

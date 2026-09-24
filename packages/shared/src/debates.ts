@@ -1,8 +1,6 @@
 import { z } from "zod";
 
-// Request and response shapes for the debates API (spec 0004).
-// The API checks requests with these, and the web app will reuse them,
-// so both sides always agree on what a debate looks like.
+// request/response schemas for the debates api. shared with the web app so both sides agree
 
 export const DEBATE_CATEGORIES = ["TACTICAL", "TRANSFER", "PLAYER", "OTHER"] as const;
 export const TAG_KINDS = ["TEAM", "LEAGUE"] as const;
@@ -10,11 +8,9 @@ export const TAG_KINDS = ["TEAM", "LEAGUE"] as const;
 export const DebateCategory = z.enum(DEBATE_CATEGORIES);
 export const TagKind = z.enum(TAG_KINDS);
 
-// ---------------------------------------------------------------
-// Small cleaning helpers used by the schemas below
-// ---------------------------------------------------------------
+// cleaning helpers
 
-// Keeps the first copy of each value: ["a", "b", "a"] becomes ["a", "b"].
+// dedupe, keeps first occurrence
 function removeRepeats(values: string[]): string[] {
   const kept: string[] = [];
   for (const value of values) {
@@ -41,17 +37,15 @@ function toSlugList(values: string[]): string[] {
   return result;
 }
 
-// A title is one line: line breaks become spaces, then we trim.
+// titles are single line - newlines become spaces
 function cleanTitle(title: string): string {
   const oneLine = title.replace(/[\r\n]+/g, " ");
   return oneLine.trim();
 }
 
-// ---------------------------------------------------------------
-// POST /api/debates (AC-2)
-// ---------------------------------------------------------------
+// post /api/debates
 
-// z.object ignores unknown fields (like focusPlayerId) and drops them.
+// unknown fields like focusPlayerId get dropped by z.object
 export const CreateDebateRequest = z.object({
   title: z
     .string({ error: "Title is required." })
@@ -69,7 +63,7 @@ export const CreateDebateRequest = z.object({
     .min(30, { error: "Thesis must be at least 30 characters." })
     .max(1000, { error: "Thesis must be at most 1000 characters." }),
 
-  // Uppercase and remove repeats first, THEN count and check the names.
+  // uppercase + dedupe first, then check count and values
   categories: z
     .array(z.string(), { error: "Pick 1 to 4 categories." })
     .transform(toUpperCaseList)
@@ -81,7 +75,7 @@ export const CreateDebateRequest = z.object({
         .max(4, { error: "Pick at most 4 categories." }),
     ),
 
-  // Slugs only. Whether each slug exists is checked in the database later.
+  // slugs only - existence is checked against the db in the route
   tags: z
     .array(z.string(), { error: "Tags must be a list of tag slugs." })
     .transform(toSlugList)
@@ -92,11 +86,9 @@ export const CreateDebateRequest = z.object({
 
 export type CreateDebateRequest = z.infer<typeof CreateDebateRequest>;
 
-// ---------------------------------------------------------------
-// GET /api/debates (AC-6, AC-7)
-// ---------------------------------------------------------------
+// get /api/debates
 
-// Query params arrive as text, in any letter case (?sort=TOP, ?category=transfer).
+// query params come in as strings in any case (?sort=TOP, ?category=transfer)
 export const ListDebatesQuery = z.object({
   sort: z
     .string()
@@ -112,7 +104,7 @@ export const ListDebatesQuery = z.object({
     .max(50, { error: "limit must be at most 50." })
     .default(20),
 
-  // Checked by the route (a bad cursor is INVALID_CURSOR, not VALIDATION_FAILED).
+  // validated in the route so a bad one is INVALID_CURSOR, not VALIDATION_FAILED
   cursor: z.string().optional(),
 
   category: z
@@ -124,15 +116,13 @@ export const ListDebatesQuery = z.object({
 
   tag: z.string().trim().toLowerCase().optional(),
 
-  // Usernames are stored lowercase (spec 0003).
+  // usernames are stored lowercase
   author: z.string().trim().toLowerCase().optional(),
 });
 
 export type ListDebatesQuery = z.infer<typeof ListDebatesQuery>;
 
-// ---------------------------------------------------------------
-// GET /api/tags (AC-12)
-// ---------------------------------------------------------------
+// get /api/tags
 
 export const ListTagsQuery = z.object({
   kind: z
@@ -156,19 +146,16 @@ export const ListTagsResponse = z.object({
 export type TagSummary = z.infer<typeof TagSummary>;
 export type ListTagsResponse = z.infer<typeof ListTagsResponse>;
 
-// ---------------------------------------------------------------
-// The one Debate shape: POST, list and read all return it (AC-9)
-// ---------------------------------------------------------------
+// the single debate shape returned by post, list and read
 
 export const DebateAuthor = z.object({
-  username: z.string().nullable(), // null means the account was deleted
+  username: z.string().nullable(), // null = account deleted
   displayUsername: z.string().nullable(),
-  displayName: z.string(), // "deleted user" when the account is gone
+  displayName: z.string(), // "deleted user" when account is gone
   badge: z.enum(["SPECTATOR", "ASSISTANT_REF", "CHIEF_VAR"]).nullable(),
 });
 
-// A summary of the newest review. Only a COMPLETE review fills the
-// decision, score, summary and completedAt; before that they are null.
+// newest review summary. decision/score/summary/completedAt are null until COMPLETE
 export const LatestReview = z.object({
   id: z.string(),
   status: z.enum(["QUEUED", "RUNNING", "COMPLETE", "FAILED"]),
@@ -198,7 +185,7 @@ export const Debate = z.object({
 
 export const ListDebatesResponse = z.object({
   items: z.array(Debate),
-  nextCursor: z.string().nullable(), // null on the last page
+  nextCursor: z.string().nullable(), // null on last page
 });
 
 export type DebateAuthor = z.infer<typeof DebateAuthor>;

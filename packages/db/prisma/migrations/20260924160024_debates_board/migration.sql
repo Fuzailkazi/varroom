@@ -92,7 +92,7 @@ ALTER TABLE "comments" ADD CONSTRAINT "comments_debate_id_fkey" FOREIGN KEY ("de
 -- AddForeignKey
 ALTER TABLE "comments" ADD CONSTRAINT "comments_author_id_fkey" FOREIGN KEY ("author_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
--- Added by hand (spec 0004): a vote is only ever 1 (up) or -1 (down).
+-- Added by hand: a vote is only ever 1 (up) or -1 (down).
 -- Prisma can't express a CHECK in schema.prisma, and it does not track
 -- CHECK constraints, so later migrations leave this one alone.
 ALTER TABLE "debate_votes" ADD CONSTRAINT "debate_votes_value_check" CHECK ("value" IN (1, -1));

@@ -7,12 +7,9 @@ import { getLastEmail } from "../auth/email.ts";
 import { Fan, newFanDetails } from "../testing/fan.ts";
 import { startTestServer } from "../testing/server.ts";
 
-// Integration tests for the debates API (spec 0004). Like the sign in
-// tests, they run against the Neon `test` branch (wiped and seeded with
-// tags before every run) and are skipped without DATABASE_URL_TEST.
-//
-// Other tests post debates too, so every list test filters by its own
-// fan (?author=...) to only see its own debates.
+// integration tests for the debates api. runs against the neon test branch
+// (reset + seeded before each run), skipped without DATABASE_URL_TEST.
+// list tests filter by ?author= so they only see their own debates
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const hasTestDatabase = Boolean(process.env.DATABASE_URL);
@@ -31,9 +28,7 @@ afterAll(() => {
   if (server) server.close();
 });
 
-// ---------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------
+// helpers
 
 type TestFan = {
   fan: Fan;
@@ -42,7 +37,7 @@ type TestFan = {
   password: string;
 };
 
-// A signed in fan. confirmed: true also clicks the email link.
+// signs up a fan. confirmed = also clicks the email link
 async function newFan(confirmed: boolean): Promise<TestFan> {
   const fan = new Fan(baseUrl);
   const details = newFanDetails();
@@ -60,7 +55,7 @@ async function newFan(confirmed: boolean): Promise<TestFan> {
   return { fan: fan, userId: user.id, username: details.username, password: details.password };
 }
 
-// A valid debate body. Each call gets a different title, so no duplicates.
+// valid body with a unique title so posts never collide as duplicates
 function debateBody(extra: Record<string, unknown> = {}) {
   const tag = crypto.randomUUID().slice(0, 8);
   return {
@@ -79,7 +74,7 @@ async function errorOf(response: Response) {
   return ErrorResponse.parse(await response.json()).error;
 }
 
-// Reads a list page and checks its shape.
+// fetch a list page and parse it
 async function getList(fan: Fan, query: string) {
   const response = await fan.call(`/api/debates?${query}`);
   expect(response.status).toBe(200);
@@ -94,39 +89,47 @@ function idsOf(debates: { id: string }[]): string[] {
   return ids;
 }
 
-// Saves debates straight into the database (no cap, no API).
-// They are dated 2 days ago, a second apart, so they don't count towards
-// the daily cap and the newest is the first in the list.
+// inserts debates directly (no api, no cap). dated 2 days ago a second apart
+// so they don't hit the cap and the order is predictable
 async function insertDebates(authorId: string, count: number): Promise<string[]> {
   const start = Date.now() - 2 * ONE_DAY_MS;
-  const ids: string[] = [];
+
+  const rows = [];
   for (let i = 0; i < count; i++) {
-    const debate = await prisma.debate.create({
-      data: {
-        authorId: authorId,
-        title: `Inserted debate number ${i}`,
-        thesis: "A thesis long enough to pass the thirty character rule.",
-        categories: ["OTHER"],
-        createdAt: new Date(start - i * 1000),
-      },
+    rows.push({
+      authorId: authorId,
+      title: `Inserted debate number ${i}`,
+      thesis: "A thesis long enough to pass the thirty character rule.",
+      categories: ["OTHER" as const],
+      createdAt: new Date(start - i * 1000),
     });
+  }
+
+  // single query, 25 inserts on neon took 4s+
+  const created = await prisma.debate.createManyAndReturn({
+    data: rows,
+    select: { id: true, createdAt: true },
+  });
+
+  // createManyAndReturn doesn't guarantee order
+  created.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const ids: string[] = [];
+  for (const debate of created) {
     ids.push(debate.id);
   }
   return ids; // newest first
 }
 
-// A fetch with full control over the headers, for the origin and content type tests.
+// raw fetch with full header control, for origin/content type tests
 async function rawRequest(fan: Fan, method: string, path: string, headers: Record<string, string>, body?: string) {
   const allHeaders: Record<string, string> = { ...headers, Cookie: fan.cookieHeader() };
   return fetch(baseUrl + path, { method: method, headers: allHeaders, body: body });
 }
 
-// ---------------------------------------------------------------
-// The tests
-// ---------------------------------------------------------------
+// the tests
 
-describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
-  describe("posting and reading (AC-1, AC-9)", () => {
+describe.skipIf(!hasTestDatabase)("debates API", () => {
+  describe("posting and reading", () => {
     test("a confirmed fan posts a debate and reads it back in the same shape", async () => {
       const { fan, username } = await newFan(true);
 
@@ -142,7 +145,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
       expect(posted.title).toBe("Arsenal should sign a striker"); // trimmed, line break gone
       expect(posted.thesis).toBe("They create plenty of chances but finish too few of them every season.");
       expect(posted.categories).toEqual(["TRANSFER", "TACTICAL"]);
-      // Leagues first, then teams.
+      // leagues first, then teams
       expect(posted.tags).toEqual([
         { slug: "premier-league", name: "Premier League", kind: "LEAGUE" },
         { slug: "arsenal", name: "Arsenal", kind: "TEAM" },
@@ -156,18 +159,18 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
       expect(posted.latestReview).toBeNull();
       expect(posted.myVote).toBeNull();
 
-      // It comes first in the New list...
+      // should be first in the new list
       const list = await getList(fan, `sort=new&author=${username}`);
       expect(list.items[0]).toEqual(posted);
 
-      // ...and reading it by id gives the same shape, even without a session.
+      // reading by id gives the same shape, even anonymous
       const stranger = new Fan(baseUrl);
       const read = await stranger.call(`/api/debates/${posted.id}`);
       expect(read.status).toBe(200);
       expect(Debate.parse(await read.json())).toEqual(posted);
     });
 
-    test("the latest review and a deleted author are shown (AC-9)", async () => {
+    test("the latest review and a deleted author are shown", async () => {
       const { fan, userId } = await newFan(true);
       const [id] = await insertDebates(userId, 1);
 
@@ -184,7 +187,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
       expect(debate.latestReview?.credibilityScore).toBe(74);
     });
 
-    test("an unknown or malformed id answers 404, never 500 (AC-9)", async () => {
+    test("an unknown or malformed id answers 404, never 500", async () => {
       const fan = new Fan(baseUrl);
       const malformed = await fan.call("/api/debates/abc");
       expect(malformed.status).toBe(404);
@@ -195,8 +198,8 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
     });
   });
 
-  describe("validation (AC-2, AC-14)", () => {
-    // Each bad body, and the field path the error must name.
+  describe("validation", () => {
+    // bad body + the field path the error should point at
     const cases: { name: string; body: Record<string, unknown>; path: string }[] = [
       { name: "a 9 character title", body: debateBody({ title: "Too short" }), path: "title" },
       { name: "a thesis of only spaces", body: debateBody({ thesis: "                                        " }), path: "thesis" },
@@ -220,7 +223,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
 
         const error = await errorOf(response);
         expect(error.code).toBe("VALIDATION_FAILED");
-        // The error must name the field (or an item in it, like "categories.4").
+        // must name the field or an item in it, e.g. categories.4
         expect(hasPathStartingWith(error.fields, testCase.path)).toBe(true);
       });
     }
@@ -245,7 +248,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
     });
   });
 
-  describe("who may post (AC-3)", () => {
+  describe("who may post", () => {
     test("no session answers 401", async () => {
       const stranger = new Fan(baseUrl);
       const response = await postDebate(stranger, debateBody());
@@ -289,7 +292,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
     });
   });
 
-  describe("daily cap and duplicates (AC-4, AC-5)", () => {
+  describe("daily cap and duplicates", () => {
     test("the 6th post in 24 hours answers 429 and saves nothing; a repeat answers 409 even at the cap", async () => {
       const { fan, userId } = await newFan(true);
 
@@ -308,7 +311,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
       expect((await errorOf(sixth)).code).toBe("POST_LIMIT_REACHED");
       expect(await prisma.debate.count({ where: { authorId: userId } })).toBe(5);
 
-      // The same title and thesis again, with extra spaces: the duplicate wins over the cap.
+      // same title/thesis with extra spaces - dupe check wins over the cap
       const repeat = await postDebate(fan, {
         ...firstBody,
         title: `   ${firstBody.title}   `,
@@ -322,7 +325,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
     });
   });
 
-  describe("listing (AC-6 to AC-8, AC-10)", () => {
+  describe("listing", () => {
     test("New pages through 25 debates with no repeats, even when a new one is posted in between", async () => {
       const { fan, userId, username } = await newFan(true);
       const inserted = await insertDebates(userId, 25);
@@ -331,7 +334,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
       expect(idsOf(page1.items)).toEqual(inserted.slice(0, 10));
       expect(page1.nextCursor).not.toBeNull();
 
-      // A new debate appears at the top, but page 2 carries on after page 1.
+      // new post lands on top, page 2 should still continue from page 1
       const posted = await postDebate(fan, debateBody());
       expect(posted.status).toBe(201);
 
@@ -355,7 +358,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
       const { fan, userId, username } = await newFan(true);
       const ids = await insertDebates(userId, 6);
 
-      // [voteScore, credibilityScore] for each inserted debate.
+      // [voteScore, credibilityScore] per inserted debate
       const scores: [number, number | null][] = [
         [5, 10], // ids[0]
         [5, 80], // ids[1]
@@ -387,7 +390,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
       await postDebate(fan, debateBody({ categories: ["TACTICAL"], tags: ["arsenal"] }));
       const matchId = Debate.parse(await match.json()).id;
 
-      // The username in capitals still matches.
+      // uppercase username should still match
       const filtered = await getList(fan, `category=transfer&tag=arsenal&author=${username.toUpperCase()}`);
       expect(idsOf(filtered.items)).toEqual([matchId]);
 
@@ -407,7 +410,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
       }
     });
 
-    test("a cursor that is not an id, or points at a deleted debate, answers 400 INVALID_CURSOR (AC-8)", async () => {
+    test("a cursor that is not an id, or points at a deleted debate, answers 400 INVALID_CURSOR", async () => {
       const { fan, userId, username } = await newFan(true);
       await insertDebates(userId, 3);
 
@@ -423,7 +426,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
       expect((await errorOf(notAnId)).code).toBe("INVALID_CURSOR");
     });
 
-    test("myVote shows the viewer's own vote, and null without a session (AC-10)", async () => {
+    test("myVote shows the viewer's own vote, and null without a session", async () => {
       const { userId } = await newFan(true);
       const [id] = await insertDebates(userId, 1);
       const voter = await newFan(true);
@@ -437,7 +440,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
     });
   });
 
-  describe("deleting (AC-11)", () => {
+  describe("deleting", () => {
     test("only the author can delete, and everything attached goes with it", async () => {
       const author = await newFan(true);
       const other = await newFan(true);
@@ -488,7 +491,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
     });
   });
 
-  describe("account deletion keeps votes and comments (AC-13)", () => {
+  describe("account deletion keeps votes and comments", () => {
     test("the rows stay with a null user", async () => {
       const { userId } = await newFan(true);
       const [id] = await insertDebates(userId, 1);
@@ -518,7 +521,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
     });
   });
 
-  describe("tags (AC-12)", () => {
+  describe("tags", () => {
     test("GET /api/tags lists leagues first, then teams, and filters by kind", async () => {
       const fan = new Fan(baseUrl);
 
@@ -546,7 +549,7 @@ describe.skipIf(!hasTestDatabase)("debates API (spec 0004)", () => {
   });
 });
 
-// Small helpers used above, kept at the bottom so the tests read first.
+// helpers
 function hasPathStartingWith(fields: { path: string }[] | undefined, path: string): boolean {
   if (!fields) {
     return false;

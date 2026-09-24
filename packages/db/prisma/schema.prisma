@@ -1,6 +1,6 @@
 // VAR Room database schema. Feature 3 (data model) made the first
 // migration; feature 6 (sign in) added the auth tables; feature 27
-// (debates API, spec 0004) added the board: categories, tags, votes
+// (debates API) added the board: categories, tags, votes
 // and comments.
 // Table and column names are snake_case in the database (@@map/@map)
 // because the analytics queries are written in raw SQL.
@@ -15,11 +15,9 @@ datasource db {
   provider = "postgresql"
 }
 
-// --------------------------------------------------------
-// FOOTBALL DATA (loaded from StatsBomb open data, feature 4)
-// Ids are StatsBomb's own ids, so a second import updates rows
+// football data (statsbomb open data, feature 4)
+// ids are statsbomb's own ids, so a second import updates rows
 // instead of duplicating them.
-// --------------------------------------------------------
 
 model Competition {
   id              Int      @id // StatsBomb competition_id, e.g. 55 = UEFA Euro
@@ -146,12 +144,10 @@ model MatchEvent {
   @@map("match_events")
 }
 
-// --------------------------------------------------------
-// ACCOUNTS AND SESSIONS (Better Auth, feature 6, spec 0003)
-// Better Auth reads and writes these through the Prisma adapter using the
+// accounts and sessions (better auth, feature 6)
+// better auth reads and writes these through the Prisma adapter using the
 // model and field names (prisma.user, emailVerified), so those follow its
 // schema; @@map/@map give the real tables snake_case names.
-// --------------------------------------------------------
 
 model User {
   id              String       @id
@@ -238,27 +234,23 @@ model Verification {
   @@map("verifications")
 }
 
-// --------------------------------------------------------
-// DEBATES AND VAR REVIEWS (the agent pipeline, feature 7)
-// --------------------------------------------------------
+// debates and var reviews (the agent pipeline, feature 7)
 
 model Debate {
   id               String           @id @default(uuid()) @db.Uuid
-  authorId         String?          @map("author_id") // null once the author deletes their account
+  authorId         String?          @map("author_id") // null = author deleted their account
   author           User?            @relation(fields: [authorId], references: [id], onDelete: SetNull)
   title            String
   thesis           String
-  categories       DebateCategory[] // 1 to 4 different values, checked by the API
-  focusPlayerId    Int?             @map("focus_player_id") // not accepted by the API yet
+  categories       DebateCategory[] // 1-4 distinct, enforced by the api
+  focusPlayerId    Int?             @map("focus_player_id") // not exposed by the api yet
   focusPlayer      Player?          @relation(fields: [focusPlayerId], references: [id])
-  // Cached counters (spec 0004). Only feature 12 (votes) and feature 22
-  // (comments) change them, always in the same transaction as the row.
+  // cached counters. only the vote/comment routes update them, in the same transaction as the row
   upVotes          Int              @default(0) @map("up_votes")
   downVotes        Int              @default(0) @map("down_votes")
   voteScore        Int              @default(0) @map("vote_score") // up_votes - down_votes
   commentCount     Int              @default(0) @map("comment_count")
-  // The score of the newest COMPLETE review, null if never reviewed.
-  // Only feature 25 writes it, never the model.
+  // score of the newest COMPLETE review, null = never reviewed. written by code, never the llm
   credibilityScore Int?             @map("credibility_score")
   reviews          Review[]
   tags             DebateTag[]
@@ -268,9 +260,9 @@ model Debate {
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
   @@index([authorId])
-  // For the New sort: newest first, id breaks ties.
+  // new sort: newest first, id breaks ties
   @@index([createdAt(sort: Desc), id(sort: Desc)])
-  // GIN is a Postgres index for "does this array contain X" lookups.
+  // gin index for array contains lookups
   @@index([categories], type: Gin)
   @@map("debates")
 }
@@ -282,7 +274,7 @@ enum DebateCategory {
   OTHER
 }
 
-// Team and league tags. Filled only by the seed (prisma/seed.ts).
+// team + league tags, seed only (prisma/seed.ts)
 model Tag {
   id      Int         @id @default(autoincrement())
   slug    String      @unique // e.g. "bayern-munich"
@@ -293,18 +285,18 @@ model Tag {
   @@map("tags")
 }
 
-// LEAGUE also covers the UEFA cups (Champions League, Europa League).
+// LEAGUE also covers the uefa cups
 enum TagKind {
   TEAM
   LEAGUE
 }
 
-// Links a debate to a tag (a debate has 0 to 5 tags).
+// debate <-> tag link, 0-5 per debate
 model DebateTag {
   debateId String @map("debate_id") @db.Uuid
   tagId    Int    @map("tag_id")
   debate   Debate @relation(fields: [debateId], references: [id], onDelete: Cascade)
-  // Restrict: a tag that is still used can't be deleted.
+  // can't delete a tag that's still in use
   tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Restrict)
 
   @@id([debateId, tagId])
@@ -312,12 +304,12 @@ model DebateTag {
   @@map("debate_tags")
 }
 
-// One up (1) or down (-1) vote per fan per debate. The migration adds a
-// CHECK so the database refuses any other value. Routes come in feature 12.
+// one vote per user per debate, value 1 or -1 (CHECK added by hand in the migration).
+// routes come with the votes feature
 model DebateVote {
   id        String   @id @default(uuid()) @db.Uuid
   debateId  String   @map("debate_id") @db.Uuid
-  userId    String?  @map("user_id") // null once the voter deletes their account
+  userId    String?  @map("user_id") // null = voter deleted their account
   value     Int      @db.SmallInt
   debate    Debate   @relation(fields: [debateId], references: [id], onDelete: Cascade)
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -328,13 +320,12 @@ model DebateVote {
   @@map("debate_votes")
 }
 
-// A flat reply under a debate. No editing, so no updated_at.
-// Routes come in feature 22.
+// flat replies, no editing so no updated_at. routes come with the comments feature
 model Comment {
   id        String   @id @default(uuid()) @db.Uuid
   debateId  String   @map("debate_id") @db.Uuid
-  authorId  String?  @map("author_id") // null once the author deletes their account
-  body      String // 1 to 280 characters, checked by feature 22
+  authorId  String?  @map("author_id") // null = author deleted their account
+  body      String // 1-280 chars, enforced by the api
   debate    Debate   @relation(fields: [debateId], references: [id], onDelete: Cascade)
   author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now()) @map("created_at")

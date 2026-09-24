@@ -3,14 +3,10 @@ import type { z } from "zod";
 import type { FieldError } from "@varroom/shared";
 import { sendError } from "./errors.ts";
 
-// Checks request data (a body or a query) against a Zod schema.
-//
+// parses body/query with a zod schema. returns the clean data, or sends
+// 400 VALIDATION_FAILED (one fields entry per issue) and returns null
 //   const body = validate(CreateDebateRequest, req.body, res);
-//   if (!body) return; // a 400 was already sent
-//
-// On success it returns the cleaned data. On failure it answers
-// 400 VALIDATION_FAILED with one entry in "fields" per bad input
-// (spec 0004, AC-2), and returns null.
+//   if (!body) return; // 400 already sent
 export function validate<Schema extends z.ZodType>(
   schema: Schema,
   data: unknown,
@@ -23,8 +19,7 @@ export function validate<Schema extends z.ZodType>(
 
   const fields: FieldError[] = [];
   for (const issue of result.error.issues) {
-    // issue.path is a list like ["tags", 2]; we send it as "tags.2".
-    // An empty path means the whole body was wrong (e.g. it was not an object).
+    // ["tags", 2] -> "tags.2". empty path = whole body was wrong
     let path = issue.path.join(".");
     if (path === "") {
       path = "body";

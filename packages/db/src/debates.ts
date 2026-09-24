@@ -1,17 +1,13 @@
 import { prisma } from "./client.ts";
 import { listNewDebateIds, listTopDebateIds } from "./generated/prisma/sql.ts";
 
-// Database functions for the debates API (spec 0004).
-// The API never talks to Prisma directly for debates; it calls these.
+// db access for debates. the api goes through these, never prisma directly
 
 export type DebateCategoryValue = "TACTICAL" | "TRANSFER" | "PLAYER" | "OTHER";
 
-// ---------------------------------------------------------------
-// Posting (AC-1, AC-4, AC-5)
-// ---------------------------------------------------------------
+// posting
 
-// A debate by the same fan, with the exact same title and thesis,
-// posted after `since`. Returns its id, or null if there is none.
+// same author + exact same title/thesis after `since` -> its id, else null
 export async function findRecentDuplicate(
   authorId: string,
   title: string,
@@ -34,7 +30,7 @@ export async function findRecentDuplicate(
   return duplicate.id;
 }
 
-// How many debates this fan posted after `since` (the daily cap).
+// debates by this author after `since`, for the daily cap
 export function countDebatesSince(authorId: string, since: Date): Promise<number> {
   return prisma.debate.count({
     where: {
@@ -52,9 +48,8 @@ export type NewDebate = {
   tagIds: number[];
 };
 
-// Saves the debate and its tag links together. A "nested create" runs as
-// one transaction: either everything is saved, or nothing is.
-// Feature 25 will add the QUEUED review to this same create.
+// creates debate + tag links in one nested create (single transaction).
+// the review api will add the QUEUED review here later
 export async function createDebate(debate: NewDebate): Promise<string> {
   const tagLinks = [];
   for (const tagId of debate.tagIds) {
@@ -74,13 +69,9 @@ export async function createDebate(debate: NewDebate): Promise<string> {
   return created.id;
 }
 
-// ---------------------------------------------------------------
-// Reading (AC-6, AC-9, AC-10)
-// ---------------------------------------------------------------
+// reading
 
-// The full debates for these ids, with everything a response needs:
-// the author, the tags, and the newest review (any status).
-// The order of the result is NOT the order of `ids`; the caller fixes that.
+// full debates with author, tags and newest review. result order is not the ids order
 export function getDebatesByIds(ids: string[]) {
   return prisma.debate.findMany({
     where: { id: { in: ids } },
@@ -108,11 +99,10 @@ export function getDebatesByIds(ids: string[]) {
   });
 }
 
-// One debate as getDebatesByIds returns it.
+// row type from getDebatesByIds
 export type DebateRow = Awaited<ReturnType<typeof getDebatesByIds>>[number];
 
-// The viewer's votes on these debates: debate id -> 1 or -1.
-// Debates they did not vote on are not in the map.
+// debateId -> vote value for this user. no entry = no vote
 export async function getVotesForUser(userId: string, debateIds: string[]): Promise<Map<string, number>> {
   const votes = await prisma.debateVote.findMany({
     where: {
@@ -129,7 +119,7 @@ export async function getVotesForUser(userId: string, debateIds: string[]): Prom
   return byDebate;
 }
 
-// Does a debate with this id exist? Used to check a list cursor (AC-8).
+// used to validate the list cursor
 export async function debateExists(id: string): Promise<boolean> {
   const found = await prisma.debate.findUnique({
     where: { id: id },
@@ -147,11 +137,10 @@ export type ListDebateIdsOptions = {
   author?: string | undefined;
 };
 
-// One page of debate ids, in the right order, from the TypedSQL files in
-// prisma/sql. We ask for `limit` rows; the caller asks for one extra to
-// find out if there is a next page.
+// one page of ordered ids from the typedsql files in prisma/sql.
+// caller passes limit + 1 to detect a next page
 export async function listDebateIds(options: ListDebateIdsOptions): Promise<string[]> {
-  // TypedSQL wants null (not undefined) for a param that is not set.
+  // typedsql needs null, not undefined, for optional params
   const category = options.category ?? null;
   const tag = options.tag ?? null;
   const author = options.author ?? null;
@@ -171,12 +160,9 @@ export async function listDebateIds(options: ListDebateIdsOptions): Promise<stri
   return ids;
 }
 
-// ---------------------------------------------------------------
-// Deleting (AC-11)
-// ---------------------------------------------------------------
+// deleting
 
-// Who wrote the debate. `found: false` means no such debate.
-// authorId is null when the author deleted their account.
+// found: false = no such debate. authorId null = author deleted their account
 export async function getDebateAuthor(id: string): Promise<{ found: boolean; authorId: string | null }> {
   const debate = await prisma.debate.findUnique({
     where: { id: id },
@@ -189,9 +175,8 @@ export async function getDebateAuthor(id: string): Promise<{ found: boolean; aut
   return { found: true, authorId: debate.authorId };
 }
 
-// Deletes the debate. The database removes its tags, votes, comments and
-// reviews with it (ON DELETE CASCADE). deleteMany does not throw when the
-// row is already gone (another request deleted it a moment ago).
+// tags/votes/comments/reviews go with it via cascade.
+// deleteMany so a concurrent delete doesn't throw
 export async function deleteDebate(id: string): Promise<void> {
   await prisma.debate.deleteMany({
     where: { id: id },

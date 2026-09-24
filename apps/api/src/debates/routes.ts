@@ -22,14 +22,10 @@ import { sendError } from "../errors.ts";
 import { validate } from "../validate.ts";
 import { toDebateResponse } from "./response.ts";
 
-// The debates API (spec 0004). Mounted in app.ts:
-//   app.use("/api/debates", createDebatesRouter());
-//   app.get("/api/tags", listTagsHandler);
-// The trusted origin and JSON checks for POST and DELETE already ran in
-// app.ts (requireTrustedOrigin) before any request gets here.
+// debates api. origin + json checks already ran in app.ts before we get here
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const MAX_DEBATES_PER_DAY = 5; // AC-4
+const MAX_DEBATES_PER_DAY = 5; // so one fan can't burn the ai budget
 
 const Uuid = z.uuid();
 
@@ -42,11 +38,9 @@ export function createDebatesRouter() {
   return router;
 }
 
-// ---------------------------------------------------------------
-// Helpers shared by the handlers
-// ---------------------------------------------------------------
+// helpers
 
-// The signed in fan's id, or null for an anonymous visitor.
+// signed in user id, or null for anonymous
 function viewerId(req: Request): string | null {
   if (!req.signedIn) {
     return null;
@@ -54,8 +48,7 @@ function viewerId(req: Request): string | null {
   return req.signedIn.user.id;
 }
 
-// Loads full debates for these ids and returns them as responses, in the
-// same order as `ids`. Ids of debates that no longer exist are skipped.
+// loads full debates for the ids, keeping the given order. skips ids that no longer exist
 async function loadDebates(ids: string[], viewer: string | null): Promise<Debate[]> {
   if (ids.length === 0) {
     return [];
@@ -63,19 +56,19 @@ async function loadDebates(ids: string[], viewer: string | null): Promise<Debate
 
   const rows = await getDebatesByIds(ids);
 
-  // Prisma returns rows in any order, so index them by id first...
+  // prisma doesn't keep order, so index by id
   const rowsById = new Map<string, DebateRow>();
   for (const row of rows) {
     rowsById.set(row.id, row);
   }
 
-  // ...then the viewer's votes, if someone is signed in (AC-10).
+  // viewer's votes, only when signed in
   let votes = new Map<string, number>();
   if (viewer) {
     votes = await getVotesForUser(viewer, ids);
   }
 
-  // ...and finally walk `ids` to keep the order the SQL gave us.
+  // walk ids to keep the sql order
   const debates: Debate[] = [];
   for (const id of ids) {
     const row = rowsById.get(id);
@@ -86,21 +79,19 @@ async function loadDebates(ids: string[], viewer: string | null): Promise<Debate
   return debates;
 }
 
-// ---------------------------------------------------------------
-// POST /api/debates (AC-1 to AC-5)
-// ---------------------------------------------------------------
+// post /api/debates
 
 async function createDebateHandler(req: Request, res: Response) {
-  // requireVerified ran first, so req.signedIn is set and the email is confirmed.
+  // requireVerified already ran, so signedIn is set and email is confirmed
   const authorId = req.signedIn!.user.id;
 
-  // 1. Check and clean the body (AC-2).
+  // 1. validate + clean body
   const body = validate(CreateDebateRequest, req.body, res);
   if (!body) {
     return;
   }
 
-  // 2. Every tag slug must exist (also AC-2, so it is a VALIDATION_FAILED too).
+  // 2. all tag slugs must exist - unknown slug is a validation error too
   const foundTags = await findTagsBySlugs(body.tags);
   const tagIdBySlug = new Map<string, number>();
   for (const tag of foundTags) {
@@ -125,21 +116,21 @@ async function createDebateHandler(req: Request, res: Response) {
 
   const oneDayAgo = new Date(Date.now() - ONE_DAY_MS);
 
-  // 3. The same post again in the last 24 hours? (AC-5, checked before the cap)
+  // 3. duplicate check runs before the cap so a capped user still gets told it's a dupe
   const duplicateId = await findRecentDuplicate(authorId, body.title, body.thesis, oneDayAgo);
   if (duplicateId) {
     sendError(res, 409, "DUPLICATE_DEBATE", "You already posted this debate.", { existingId: duplicateId });
     return;
   }
 
-  // 4. At most 5 debates in 24 hours (AC-4).
+  // 4. daily cap
   const postedToday = await countDebatesSince(authorId, oneDayAgo);
   if (postedToday >= MAX_DEBATES_PER_DAY) {
     sendError(res, 429, "POST_LIMIT_REACHED", "You can post 5 debates a day. Try again tomorrow.");
     return;
   }
 
-  // 5. Save it, then read it back in the one Debate shape (AC-1).
+  // 5. save, then read back in the shared debate shape
   const id = await createDebate({
     authorId: authorId,
     title: body.title,
@@ -152,9 +143,7 @@ async function createDebateHandler(req: Request, res: Response) {
   res.status(201).json(debates[0]);
 }
 
-// ---------------------------------------------------------------
-// GET /api/debates (AC-6 to AC-8, AC-10)
-// ---------------------------------------------------------------
+// get /api/debates
 
 async function listDebatesHandler(req: Request, res: Response) {
   const query = validate(ListDebatesQuery, req.query, res);
@@ -162,7 +151,7 @@ async function listDebatesHandler(req: Request, res: Response) {
     return;
   }
 
-  // AC-8: the cursor must be the id of a debate that still exists.
+  // cursor must be an existing debate id
   if (query.cursor !== undefined) {
     const isUuid = Uuid.safeParse(query.cursor).success;
     let exists = false;
@@ -175,7 +164,7 @@ async function listDebatesHandler(req: Request, res: Response) {
     }
   }
 
-  // Ask for one row more than we show: if it comes back, there is a next page.
+  // fetch limit + 1 to know if there's a next page
   const ids = await listDebateIds({
     sort: query.sort,
     limit: query.limit + 1,
@@ -198,14 +187,12 @@ async function listDebatesHandler(req: Request, res: Response) {
   res.json(body);
 }
 
-// ---------------------------------------------------------------
-// GET /api/debates/:id (AC-9, AC-10)
-// ---------------------------------------------------------------
+// get /api/debates/:id
 
 async function getDebateHandler(req: Request, res: Response) {
   const id = String(req.params.id);
 
-  // A malformed id never reaches Postgres (it would be a 500 there).
+  // bad uuid would 500 in postgres, so check it here
   if (!Uuid.safeParse(id).success) {
     sendError(res, 404, "NOT_FOUND", "No such debate.");
     return;
@@ -220,12 +207,10 @@ async function getDebateHandler(req: Request, res: Response) {
   res.json(debate);
 }
 
-// ---------------------------------------------------------------
-// DELETE /api/debates/:id (AC-11)
-// ---------------------------------------------------------------
+// delete /api/debates/:id
 
 async function deleteDebateHandler(req: Request, res: Response) {
-  // requireSession ran first. An unconfirmed fan may delete their own post.
+  // requireSession already ran. unverified users can still delete their own posts
   const userId = req.signedIn!.user.id;
   const id = String(req.params.id);
 
@@ -240,8 +225,7 @@ async function deleteDebateHandler(req: Request, res: Response) {
     return;
   }
 
-  // Only the author may delete. A debate whose author deleted their
-  // account (authorId null) can't be deleted here; moderation comes later.
+  // author only. orphaned debates (authorId null) are left for moderation
   if (debate.authorId !== userId) {
     sendError(res, 403, "FORBIDDEN", "You can only delete your own debates.");
     return;
@@ -251,9 +235,7 @@ async function deleteDebateHandler(req: Request, res: Response) {
   res.status(204).end();
 }
 
-// ---------------------------------------------------------------
-// GET /api/tags (AC-12)
-// ---------------------------------------------------------------
+// get /api/tags
 
 export async function listTagsHandler(req: Request, res: Response) {
   const query = validate(ListTagsQuery, req.query, res);

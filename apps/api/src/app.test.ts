@@ -35,7 +35,7 @@ describe("GET /api/health", () => {
   });
 });
 
-describe("our error shape (AC-11)", () => {
+describe("our error shape", () => {
   test("an unknown route answers 404 in the shared shape", async () => {
     const res = await fetch(`${baseUrl}/api/nope`);
     expect(res.status).toBe(404);
@@ -45,7 +45,7 @@ describe("our error shape (AC-11)", () => {
   test("a malformed JSON body answers 400 in the shared shape", async () => {
     const res = await fetch(`${baseUrl}/api/nope`, {
       method: "POST",
-      // Write requests must come from our own site (spec 0004, AC-3).
+      // Write requests must come from our own site.
       headers: { "Content-Type": "application/json", Origin: baseUrl },
       body: "{not json",
     });
@@ -53,7 +53,7 @@ describe("our error shape (AC-11)", () => {
     expect(ErrorResponse.parse(await res.json()).error.code).toBe("INVALID_JSON");
   });
 
-  test("GET /api/me without a session answers 401 UNAUTHENTICATED (AC-7)", async () => {
+  test("GET /api/me without a session answers 401 UNAUTHENTICATED", async () => {
     const res = await fetch(`${baseUrl}/api/me`);
     expect(res.status).toBe(401);
     expect(ErrorResponse.parse(await res.json()).error.code).toBe("UNAUTHENTICATED");

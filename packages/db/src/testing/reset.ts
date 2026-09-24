@@ -16,6 +16,11 @@ function getBranchHost(url: string | undefined): string {
   }
 }
 
+// neon pooled host -> direct host. migrations need direct, the pooler can't hold the advisory lock (P1002)
+function toDirectUrl(url: string): string {
+  return url.replace("-pooler.", ".");
+}
+
 // strip dev db urls to prevent accidental test pollution
 function removeDatabaseUrls() {
   delete process.env.DATABASE_URL;
@@ -39,12 +44,12 @@ if (!testUrl) {
     throw new Error("DATABASE_URL_TEST must be the Neon `test` branch, not `dev`. Refusing to reset it.");
   }
 
-  // Run `prisma migrate reset --force` inside packages/db.
-  // prisma.config.ts reads DIRECT_DATABASE_URL, so we give it the test URL.
+  // prisma migrate reset --force in packages/db, pointed at the test branch's direct url
   const dbFolder = join(import.meta.dir, "../..");
+  const testDirectUrl = toDirectUrl(testUrl);
   const result = Bun.spawnSync(["bun", "--bun", "prisma", "migrate", "reset", "--force"], {
     cwd: dbFolder,
-    env: { ...process.env, DIRECT_DATABASE_URL: testUrl },
+    env: { ...process.env, DIRECT_DATABASE_URL: testDirectUrl },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -53,7 +58,7 @@ if (!testUrl) {
     throw new Error("Resetting the test database failed:\n" + result.stderr.toString());
   }
 
-  // Fill the tags again (spec 0004): posting a debate needs real tag slugs.
+  // reseed tags, posting a debate needs real slugs
   const seed = Bun.spawnSync(["bun", "prisma/seed.ts"], {
     cwd: dbFolder,
     env: { ...process.env, DATABASE_URL: testUrl },
@@ -67,5 +72,5 @@ if (!testUrl) {
 
   // From now on, the app and the tests talk to the test database.
   process.env.DATABASE_URL = testUrl;
-  process.env.DIRECT_DATABASE_URL = testUrl;
+  process.env.DIRECT_DATABASE_URL = testDirectUrl;
 }

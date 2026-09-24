@@ -42,7 +42,7 @@ describe("when the environment is invalid", () => {
     expect(message()).toContain("BETTER_AUTH_SECRET");
   });
 
-  test("production refuses to boot without RESEND_API_KEY and EMAIL_FROM (AC-10)", () => {
+  test("production refuses to boot without RESEND_API_KEY and EMAIL_FROM", () => {
     expect(() => loadEnv({ ...valid, NODE_ENV: "production" })).toThrow("exit");
     expect(message()).toContain("RESEND_API_KEY");
     expect(message()).toContain("EMAIL_FROM");

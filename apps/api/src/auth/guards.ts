@@ -9,8 +9,6 @@ import type { Auth } from "./auth.ts";
 // uses requireVerified, like this:
 //
 //   app.post("/api/debates", requireVerified, createDebateHandler);
-//
-// See spec 0003.
 
 // What Better Auth gives back for a signed in fan: { user, session }.
 export type SignedIn = Auth["$Infer"]["Session"];
@@ -47,9 +45,7 @@ async function getSignedIn(req: Request): Promise<SignedIn | null> {
   return session;
 }
 
-// For public read routes (spec 0004, AC-10): never refuses anyone.
-// If the request has a valid session, req.signedIn is set, so the route
-// can show extras like "my vote". Without one, req.signedIn stays empty.
+// for public reads. sets req.signedIn if there's a valid session, never rejects
 export async function optionalSession(req: Request, _res: Response, next: NextFunction) {
   await getSignedIn(req);
   next();
@@ -65,7 +61,7 @@ export async function requireSession(req: Request, res: Response, next: NextFunc
   next();
 }
 
-// AC-4: signed in AND the email is confirmed.
+// Signed in AND the email is confirmed.
 export async function requireVerified(req: Request, res: Response, next: NextFunction) {
   const signedIn = await getSignedIn(req);
   if (!signedIn) {

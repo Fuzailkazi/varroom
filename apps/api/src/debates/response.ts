@@ -3,11 +3,9 @@ import { sortTags } from "@varroom/db";
 import { Debate } from "@varroom/shared";
 import type { DebateAuthor, LatestReview, TagSummary } from "@varroom/shared";
 
-// Turns a debate from the database into the one Debate shape that POST,
-// the list and the read route all return (spec 0004, AC-9).
-// Having a single mapper means the three routes can never drift apart.
+// db row -> shared Debate shape. single mapper so post/list/read can't drift
 
-// Shown when the author deleted their account (spec 0003).
+// placeholder author for deleted accounts
 const DELETED_USER: DebateAuthor = {
   username: null,
   displayUsername: null,
@@ -21,7 +19,7 @@ function toAuthor(row: DebateRow): DebateAuthor {
     return DELETED_USER;
   }
 
-  // Same fallback as /api/me: show the username if there is no display version.
+  // same fallback as /api/me
   let displayUsername = author.displayUsername;
   if (!displayUsername) {
     displayUsername = author.username;
@@ -40,11 +38,11 @@ function toTags(row: DebateRow): TagSummary[] {
   for (const link of row.tags) {
     tags.push({ slug: link.tag.slug, name: link.tag.name, kind: link.tag.kind });
   }
-  return sortTags(tags); // leagues first, then teams, A to Z
+  return sortTags(tags); // leagues first, then teams, a-z
 }
 
 function toLatestReview(row: DebateRow): LatestReview | null {
-  // getDebatesByIds asks for the newest review only, so there is 0 or 1.
+  // getDebatesByIds only fetches the newest review, so 0 or 1
   const review = row.reviews[0];
   if (!review) {
     return null;
@@ -66,7 +64,7 @@ function toLatestReview(row: DebateRow): LatestReview | null {
   };
 }
 
-// The vote table only holds 1 or -1 (a database CHECK), anything else is "no vote".
+// db CHECK only allows 1 or -1, anything else counts as no vote
 function toMyVote(value: number | undefined): 1 | -1 | null {
   if (value === 1) {
     return 1;
@@ -77,10 +75,9 @@ function toMyVote(value: number | undefined): 1 | -1 | null {
   return null;
 }
 
-// myVote is the viewer's vote on this debate, or undefined if they have none
-// (or nobody is signed in).
+// myVote = viewer's vote value, undefined when none or anonymous
 export function toDebateResponse(row: DebateRow, myVote: number | undefined): Debate {
-  // Debate.parse double checks the shape we promise in packages/shared.
+  // parse to make sure we match the shared schema
   return Debate.parse({
     id: row.id,
     title: row.title,

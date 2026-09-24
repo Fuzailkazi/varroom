@@ -1,16 +1,12 @@
--- One page of debate ids for the Top sort (spec 0004, AC-6 to AC-8).
--- Order: vote score, then credibility score, then newest.
--- COALESCE(credibility_score, -1) puts unreviewed debates (null score)
--- below a reviewed debate that scored 0.
---
--- The filters and the cursor work like listNewDebateIds.sql. ORDER BY and
--- the cursor comparison MUST list the same columns in the same order.
+-- one page of debate ids for the top sort: votes, then credibility, then newest.
+-- COALESCE(credibility_score, -1) puts unreviewed (null) below a reviewed 0.
+-- filters and cursor work like listNewDebateIds.sql, same column order rule applies
 --
 -- @param {String} $1:category? uppercase, e.g. TRANSFER
--- @param {String} $2:tag? a tag slug, e.g. arsenal
--- @param {String} $3:author? a lowercase username
--- @param {String} $4:cursorId? the last debate id of the previous page
--- @param {Int} $5:limit how many rows to return
+-- @param {String} $2:tag? tag slug, e.g. arsenal
+-- @param {String} $3:author? lowercase username
+-- @param {String} $4:cursorId? last debate id of the previous page
+-- @param {Int} $5:limit rows to return
 SELECT d.id
 FROM debates d
 LEFT JOIN users u ON u.id = d.author_id

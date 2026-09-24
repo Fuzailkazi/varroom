@@ -27,9 +27,7 @@ export function createApp(env: Env) {
   app.locals.auth = auth; // the guards read it from here
   app.all("/api/auth/*splat", toNodeHandler(auth));
 
-  // Every write to our own routes (POST, PUT, PATCH, DELETE) must come from
-  // our site and carry JSON (spec 0004, AC-3). It runs before express.json()
-  // so a bad origin is refused before the body is read.
+  // csrf + content type guard for our write routes. before express.json() so bad requests never get parsed
   app.use("/api", requireTrustedOrigin(getTrustedOrigins(env)));
 
   // From here on, JSON request bodies are parsed into req.body.
@@ -38,11 +36,11 @@ export function createApp(env: Env) {
   app.get("/api/health", healthHandler);
   app.get("/api/me", requireSession, meHandler);
 
-  // The board (spec 0004).
+  // debates + tags
   app.use("/api/debates", createDebatesRouter());
   app.get("/api/tags", listTagsHandler);
 
-  // AC-4: a stand in for the real write routes (posting, voting) until
+  // A stand in for the real write routes (posting, voting) until
   // they exist. Only added while running tests.
   if (env.NODE_ENV === "test") {
     app.post("/api/_test/verified-ping", requireVerified, (_req, res) => {
@@ -72,7 +70,7 @@ async function healthHandler(_req: Request, res: Response) {
   res.status(database === "up" ? 200 : 503).json(body);
 }
 
-// GET /api/me: the signed in fan's own profile (AC-7).
+// GET /api/me: the signed in fan's own profile.
 // requireSession runs first, so req.signedIn is always set here.
 async function meHandler(req: Request, res: Response) {
   const userId = req.signedIn!.user.id;

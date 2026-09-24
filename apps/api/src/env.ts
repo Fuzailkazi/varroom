@@ -10,7 +10,7 @@ const EnvSchema = z.object({
 
   PORT: z.coerce.number().int().positive().default(3000),
 
-  // Sign in (spec 0003).
+  // Sign in.
   BETTER_AUTH_SECRET: z
     .string({ error: "BETTER_AUTH_SECRET is missing. Generate one with `openssl rand -base64 32`." })
     .min(32, { error: "BETTER_AUTH_SECRET must be at least 32 characters." }),
@@ -34,7 +34,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 
   const env = result.data;
 
-  // AC-10: in production emails must really be sent, so the server
+  // In production emails must really be sent, so the server
   // refuses to start without the email settings. Development prints
   // emails and tests keep them in memory, so they don't need them.
   if (env.NODE_ENV === "production") {

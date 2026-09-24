@@ -1,6 +1,7 @@
 [test]
 # Runs once before any test file: resets the Neon `test` branch from the
-# migrations and points DATABASE_URL at it (spec 0001, "Test database reset").
+# migrations and points DATABASE_URL at it.
 preload = ["./packages/db/src/testing/reset.ts"]
-# Integration tests make several Neon round trips each.
-timeout = 20000
+# Integration tests make several Neon round trips each, so the root
+# package.json runs `bun test --timeout 20000` (this file's timeout key is
+# ignored by Bun 1.4, the tests died at the 5 s default).

@@ -1,12 +1,8 @@
 import { prisma } from "../src/client.ts";
 
-// Fills the tags table with leagues, clubs and national teams (spec 0004, AC-12).
-// Run it with `bun run db:seed`. It is safe to run again: each tag is
-// "upserted" by its slug (updated if it exists, created if not), so a
-// second run changes nothing.
-//
-// Refresh the club lists every summer (promotion and relegation).
-// Old club tags stay in the table and keep working.
+// seeds the tags table (leagues, clubs, national teams). `bun run db:seed`.
+// idempotent - matches by slug so rerunning changes nothing.
+// refresh the club lists each summer after promotion/relegation, old tags stay valid
 
 const LEAGUES = [
   "Premier League",
@@ -18,8 +14,7 @@ const LEAGUES = [
   "Europa League",
 ];
 
-// Clubs of the five big leagues, season 2026/27 (source: Wikipedia's
-// "2026–27 <league>" pages, checked on 2026-09-24).
+// top 5 leagues, 2026/27 season (wikipedia, checked 2026-09-24)
 const PREMIER_LEAGUE_CLUBS = [
   "Arsenal",
   "Aston Villa",
@@ -131,7 +126,7 @@ const LIGUE_1_CLUBS = [
   "Troyes",
 ];
 
-// The 48 national teams at the 2026 World Cup.
+// 2026 world cup, all 48 teams
 const WORLD_CUP_NATIONS = [
   "Algeria",
   "Argentina",
@@ -183,18 +178,15 @@ const WORLD_CUP_NATIONS = [
   "Uzbekistan",
 ];
 
-// Turns a name into a slug:
-//   "Atlético Madrid"        -> "atletico-madrid"
-//   "Brighton & Hove Albion" -> "brighton-hove-albion"
+// name -> slug: "Atlético Madrid" -> "atletico-madrid", "Brighton & Hove Albion" -> "brighton-hove-albion"
 export function toSlug(name: string): string {
-  // "NFD" splits "é" into "e" plus a separate accent mark,
-  // and the next line removes those accent marks.
+  // NFD splits accented chars into base + accent mark, then we strip the marks
   const split = name.normalize("NFD");
   const noAccents = split.replace(/[̀-ͯ]/g, "");
   const lower = noAccents.toLowerCase();
-  // Anything that is not a letter or a digit becomes "-".
+  // non alphanumerics -> dash
   const dashed = lower.replace(/[^a-z0-9]+/g, "-");
-  // Remove a "-" at the start or the end.
+  // trim leading/trailing dashes
   return dashed.replace(/^-+|-+$/g, "");
 }
 
@@ -204,7 +196,7 @@ type SeedTag = {
   kind: "TEAM" | "LEAGUE";
 };
 
-// All tags as one list: leagues first, then clubs, then nations.
+// leagues, then clubs, then nations
 export function buildTagList(): SeedTag[] {
   const tags: SeedTag[] = [];
 
@@ -227,13 +219,12 @@ export function buildTagList(): SeedTag[] {
   return tags;
 }
 
-// Adds missing tags and fixes changed ones, matching by slug.
-// It reads the table once and writes in bulk, because one query per tag
-// (about 150 round trips to Neon) took over 10 seconds.
+// inserts missing tags and updates changed ones by slug.
+// one read + bulk write, because 150 upserts to neon took 10s+
 export async function seedTags(): Promise<number> {
   const wanted = buildTagList();
 
-  // slug -> the tag as it is in the database now
+  // slug -> current db row
   const existing = await prisma.tag.findMany();
   const existingBySlug = new Map<string, SeedTag>();
   for (const tag of existing) {
@@ -252,7 +243,7 @@ export async function seedTags(): Promise<number> {
   }
 
   if (toCreate.length > 0) {
-    // skipDuplicates: if another run created the same slug a moment ago, skip it.
+    // skipDuplicates in case two seeds race
     await prisma.tag.createMany({ data: toCreate, skipDuplicates: true });
   }
   for (const tag of toUpdate) {
@@ -265,8 +256,7 @@ export async function seedTags(): Promise<number> {
   return wanted.length;
 }
 
-// Only runs when this file is started directly (bun prisma/seed.ts),
-// not when a test imports seedTags from it.
+// only when run directly, not when tests import seedTags
 if (import.meta.main) {
   const count = await seedTags();
   console.log(`Seeded ${count} tags.`);

@@ -1,13 +1,13 @@
 import type { NextFunction, Request, Response } from "express";
 import type { ErrorResponse, FieldError } from "@varroom/shared";
 
-// Extra details some errors carry (spec 0004).
+// optional extras on an error
 export type ErrorExtras = {
-  fields?: FieldError[]; // VALIDATION_FAILED: which inputs were wrong
-  existingId?: string; // DUPLICATE_DEBATE: the debate you already posted
+  fields?: FieldError[]; // VALIDATION_FAILED
+  existingId?: string; // DUPLICATE_DEBATE
 };
 
-// Every error our own routes send looks the same (spec 0003, AC-11):
+// Every error our own routes send looks the same:
 //   { "error": { "code": "EMAIL_NOT_VERIFIED", "message": "Confirm your email first." } }
 // "code" is for programs (it never changes), "message" is for people.
 export function sendError(res: Response, status: number, code: string, message: string, extras: ErrorExtras = {}) {
