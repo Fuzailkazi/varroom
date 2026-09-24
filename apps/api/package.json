@@ -1,0 +1,21 @@
+{
+  "name": "@varroom/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --env-file=../../.env --watch src/server.ts",
+    "start": "bun --env-file=../../.env src/server.ts",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@varroom/db": "workspace:*",
+    "@varroom/shared": "workspace:*",
+    "express": "^5.2.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/express": "^5.0.6",
+    "typescript": "catalog:"
+  }
+}
