@@ -13,8 +13,11 @@ const DELETED_USER: DebateAuthor = {
   badge: null,
 };
 
-function toAuthor(row: DebateRow): DebateAuthor {
-  const author = row.author;
+// the author fields both debates and comments load
+type AuthorFields = { username: string | null; displayUsername: string | null; name: string; badge: "SPECTATOR" | "ASSISTANT_REF" | "CHIEF_VAR" };
+
+// shared by debates and comments
+export function toAuthorResponse(author: AuthorFields | null): DebateAuthor {
   if (!author) {
     return DELETED_USER;
   }
@@ -84,7 +87,7 @@ export function toDebateResponse(row: DebateRow, myVote: number | undefined): De
     thesis: row.thesis,
     categories: row.categories,
     tags: toTags(row),
-    author: toAuthor(row),
+    author: toAuthorResponse(row.author),
     createdAt: row.createdAt.toISOString(),
     upVotes: row.upVotes,
     downVotes: row.downVotes,

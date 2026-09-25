@@ -1,11 +1,12 @@
 import express from "express";
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { toNodeHandler } from "better-auth/node";
 import { checkDatabase, getUserProfile } from "@varroom/db";
 import { HealthResponse, MeResponse } from "@varroom/shared";
 import { createAuth } from "./auth/auth.ts";
 import { createSendEmail } from "./auth/email.ts";
 import { requireSession, requireVerified } from "./auth/guards.ts";
+import { createCommentsRouter, createDebateCommentsRouter } from "./comments/routes.ts";
 import { createDebatesRouter, listTagsHandler } from "./debates/routes.ts";
 import type { Env } from "./env.ts";
 import { errorHandler, sendError } from "./errors.ts";
@@ -25,6 +26,9 @@ export function createApp(env: Env) {
   const sendEmail = createSendEmail(env);
   const auth = createAuth(env, sendEmail);
   app.locals.auth = auth; // the guards read it from here
+  // better auth reads x-forwarded-for as is, so a client could spoof it and dodge the
+  // rate limit. replace it with express's req.ip, which honours trust proxy above
+  app.use("/api/auth", useTrustedIp);
   app.all("/api/auth/*splat", toNodeHandler(auth));
 
   // csrf + content type guard for our write routes. before express.json() so bad requests never get parsed
@@ -37,7 +41,9 @@ export function createApp(env: Env) {
   app.get("/api/me", requireSession, meHandler);
 
   // debates + tags
+  app.use("/api/debates/:id/comments", createDebateCommentsRouter());
   app.use("/api/debates", createDebatesRouter());
+  app.use("/api/comments", createCommentsRouter());
   app.get("/api/tags", listTagsHandler);
 
   // A stand in for the real write routes (posting, voting) until
@@ -57,6 +63,13 @@ export function createApp(env: Env) {
   app.use(errorHandler);
 
   return app;
+}
+
+// overwrites the ip headers with the one address express trusts (req.ip)
+function useTrustedIp(req: Request, _res: Response, next: NextFunction) {
+  req.headers["x-forwarded-for"] = req.ip;
+  delete req.headers["x-real-ip"];
+  next();
 }
 
 // GET /api/health: is the API up, and can it reach the database?

@@ -4,7 +4,7 @@ import type { ErrorResponse, FieldError } from "@varroom/shared";
 // optional extras on an error
 export type ErrorExtras = {
   fields?: FieldError[]; // VALIDATION_FAILED
-  existingId?: string; // DUPLICATE_DEBATE
+  existingId?: string | null; // DUPLICATE_DEBATE, DUPLICATE_COMMENT
 };
 
 // Every error our own routes send looks the same:

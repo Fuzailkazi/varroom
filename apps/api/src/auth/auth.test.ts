@@ -460,6 +460,20 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
       expect(response.status).toBe(401);
     });
 
+    test("a spoofed X-Forwarded-For does not dodge the limit", async () => {
+      const fan = new Fan(baseUrl);
+      const email = randomMissingEmail();
+      for (let attempt = 1; attempt <= 10; attempt++) {
+        await signInWithEmail(fan, email, "whatever-it-is");
+      }
+
+      // an attacker prepends fake addresses. behind our proxy the real client ip is
+      // always the last one, and that's the one express (trust proxy 1) hands better auth
+      const spoofed = new Fan(baseUrl, `203.0.113.9, 198.51.100.7, ${fan.ip}`);
+      const response = await signInWithEmail(spoofed, email, "whatever-it-is");
+      expect(response.status).toBe(429);
+    });
+
     test("password reset requests are limited too", async () => {
       const fan = new Fan(baseUrl);
       const body = { email: randomMissingEmail() };

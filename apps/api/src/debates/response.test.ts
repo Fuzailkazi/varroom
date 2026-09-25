@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DebateRow } from "@varroom/db";
-import { toDebateResponse } from "./response.ts";
+import { toAuthorResponse, toDebateResponse } from "./response.ts";
 
 // db row -> Debate json mapper. rows built by hand, no db
 
@@ -111,5 +111,22 @@ describe("myVote", () => {
     expect(toDebateResponse(fakeRow(), undefined).myVote).toBeNull();
     expect(toDebateResponse(fakeRow(), 0).myVote).toBeNull();
     expect(toDebateResponse(fakeRow(), 5).myVote).toBeNull();
+  });
+});
+
+// shared by debates and comments
+describe("toAuthorResponse", () => {
+  test("maps a live author, keeping the display username as typed", () => {
+    const author = toAuthorResponse({ username: "jude_fan", displayUsername: "Jude_Fan", name: "Jude", badge: "ASSISTANT_REF" });
+    expect(author).toEqual({ username: "jude_fan", displayUsername: "Jude_Fan", displayName: "Jude", badge: "ASSISTANT_REF" });
+  });
+
+  test("falls back to the username when there is no display username", () => {
+    const author = toAuthorResponse({ username: "jude_fan", displayUsername: null, name: "Jude", badge: "SPECTATOR" });
+    expect(author.displayUsername).toBe("jude_fan");
+  });
+
+  test("null means the account was deleted", () => {
+    expect(toAuthorResponse(null)).toEqual({ username: null, displayUsername: null, displayName: "deleted user", badge: null });
   });
 });

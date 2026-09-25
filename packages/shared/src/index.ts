@@ -1,3 +1,4 @@
+export { Comment, CreateCommentRequest, ListCommentsQuery, ListCommentsResponse } from "./comments.ts";
 export {
   CreateDebateRequest,
   DEBATE_CATEGORIES,

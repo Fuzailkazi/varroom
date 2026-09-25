@@ -165,6 +165,11 @@ export function createAuth(env: Env, sendEmail: SendEmail) {
       updateAge: ONE_DAY_IN_SECONDS, // and is renewed at most once a day
     },
 
+    advanced: {
+      // only read the header app.ts just rewrote from req.ip
+      ipAddress: { ipAddressHeaders: ["x-forwarded-for"] },
+    },
+
     rateLimit: {
       // Better Auth only limits in production unless we turn it on.
       enabled: true,
