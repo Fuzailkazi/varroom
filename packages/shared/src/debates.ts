@@ -86,6 +86,31 @@ export const CreateDebateRequest = z.object({
 
 export type CreateDebateRequest = z.infer<typeof CreateDebateRequest>;
 
+// put /api/debates/:id/vote
+
+export const VoteRequest = z.object({
+  value: z.union([z.literal(1), z.literal(-1)], { error: "value must be 1 or -1." }),
+});
+
+export type VoteRequest = z.infer<typeof VoteRequest>;
+
+// pure toggle rule: same value again clears the vote, a different value
+// switches it, no current vote creates one
+export type VoteAction =
+  | { action: "insert"; value: 1 | -1 }
+  | { action: "update"; value: 1 | -1 }
+  | { action: "delete" };
+
+export function nextVoteAction(current: 1 | -1 | null, requested: 1 | -1): VoteAction {
+  if (current === null) {
+    return { action: "insert", value: requested };
+  }
+  if (current === requested) {
+    return { action: "delete" };
+  }
+  return { action: "update", value: requested };
+}
+
 // get /api/debates
 
 // query params come in as strings in any case (?sort=TOP, ?category=transfer)

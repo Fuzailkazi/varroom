@@ -13,9 +13,17 @@ import {
   getVotesForUser,
   listDebateIds,
   listTags,
+  setVote,
 } from "@varroom/db";
 import type { DebateRow } from "@varroom/db";
-import { CreateDebateRequest, ListDebatesQuery, ListDebatesResponse, ListTagsQuery, ListTagsResponse } from "@varroom/shared";
+import {
+  CreateDebateRequest,
+  ListDebatesQuery,
+  ListDebatesResponse,
+  ListTagsQuery,
+  ListTagsResponse,
+  VoteRequest,
+} from "@varroom/shared";
 import type { Debate, FieldError } from "@varroom/shared";
 import { optionalSession, requireSession, requireVerified } from "../auth/guards.ts";
 import { sendError } from "../errors.ts";
@@ -35,6 +43,7 @@ export function createDebatesRouter() {
   router.get("/", optionalSession, listDebatesHandler);
   router.get("/:id", optionalSession, getDebateHandler);
   router.delete("/:id", requireSession, deleteDebateHandler);
+  router.put("/:id/vote", requireVerified, voteHandler);
   return router;
 }
 
@@ -233,6 +242,33 @@ async function deleteDebateHandler(req: Request, res: Response) {
 
   await deleteDebate(id);
   res.status(204).end();
+}
+
+// put /api/debates/:id/vote
+
+async function voteHandler(req: Request, res: Response) {
+  // requireVerified already ran, so signedIn is set and email is confirmed
+  const userId = req.signedIn!.user.id;
+  const id = String(req.params.id);
+
+  if (!Uuid.safeParse(id).success) {
+    sendError(res, 404, "NOT_FOUND", "No such debate.");
+    return;
+  }
+
+  const body = validate(VoteRequest, req.body, res);
+  if (!body) {
+    return;
+  }
+
+  const result = await setVote(id, userId, body.value);
+  if (result.outcome === "debate_not_found") {
+    sendError(res, 404, "NOT_FOUND", "No such debate.");
+    return;
+  }
+
+  const debates = await loadDebates([id], userId);
+  res.json(debates[0]);
 }
 
 // get /api/tags

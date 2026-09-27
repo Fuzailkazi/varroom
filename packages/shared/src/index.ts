@@ -13,6 +13,9 @@ export {
   TAG_KINDS,
   TagKind,
   TagSummary,
+  VoteRequest,
+  type VoteAction,
+  nextVoteAction,
 } from "./debates.ts";
 export { ErrorResponse, FieldError } from "./errors.ts";
 export { HealthResponse } from "./health.ts";

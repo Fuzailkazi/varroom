@@ -1,0 +1,4 @@
+[test]
+# agents tests that need no database run without the root db reset preload.
+# integration tests (pipeline.test.ts with a real DB) should be run from the
+# repo root where the root bunfig.toml applies.

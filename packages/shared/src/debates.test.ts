@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CreateDebateRequest, Debate, ListDebatesQuery, ListTagsQuery } from "./debates.ts";
+import { CreateDebateRequest, Debate, ListDebatesQuery, ListTagsQuery, VoteRequest, nextVoteAction } from "./debates.ts";
 
 // schema tests, no db. checks how bodies/queries get cleaned and validated
 
@@ -197,5 +197,36 @@ describe("Debate response shape", () => {
 
   test("createdAt must be an ISO date string", () => {
     expect(Debate.safeParse({ ...debate, createdAt: "yesterday" }).success).toBe(false);
+  });
+});
+
+describe("VoteRequest", () => {
+  test("accepts 1 and -1", () => {
+    expect(VoteRequest.safeParse({ value: 1 }).success).toBe(true);
+    expect(VoteRequest.safeParse({ value: -1 }).success).toBe(true);
+  });
+
+  test("rejects 0, 2, a string, and a missing value", () => {
+    expect(VoteRequest.safeParse({ value: 0 }).success).toBe(false);
+    expect(VoteRequest.safeParse({ value: 2 }).success).toBe(false);
+    expect(VoteRequest.safeParse({ value: "up" }).success).toBe(false);
+    expect(VoteRequest.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("nextVoteAction", () => {
+  test("no current vote inserts the requested value", () => {
+    expect(nextVoteAction(null, 1)).toEqual({ action: "insert", value: 1 });
+    expect(nextVoteAction(null, -1)).toEqual({ action: "insert", value: -1 });
+  });
+
+  test("the other value switches the vote", () => {
+    expect(nextVoteAction(1, -1)).toEqual({ action: "update", value: -1 });
+    expect(nextVoteAction(-1, 1)).toEqual({ action: "update", value: 1 });
+  });
+
+  test("the same value again clears the vote", () => {
+    expect(nextVoteAction(1, 1)).toEqual({ action: "delete" });
+    expect(nextVoteAction(-1, -1)).toEqual({ action: "delete" });
   });
 });

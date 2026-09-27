@@ -425,20 +425,26 @@ enum ClaimVerdict {
   INSUFFICIENT_DATA
 }
 
-// The evidence ledger: one row per real tool result the Stats Specialist
-// got, written by code (never by the model). Labels are E1, E2, ...
+// The evidence ledger: one row per real tool result written by code (never by
+// the model). Labels are E1, E2, ... scoped to the review.
+// kind is plain TEXT so new kinds (e.g. "API" for a future stats API) don't
+// require a migration ALTER TYPE; application code uses the EvidenceKind enum.
 model Evidence {
-  id        String          @id @default(uuid()) @db.Uuid
-  reviewId  String          @map("review_id") @db.Uuid
-  label     String // "E1", "E2", ...
-  toolName  String          @map("tool_name")
-  args      Json
-  result    Json
-  lowSample Boolean         @default(false) @map("low_sample") // fewer than 90 minutes behind it
-  error     String? // the tool failed; the claim cannot rest on it
-  review    Review          @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  citedBy   ClaimEvidence[]
-  createdAt DateTime        @default(now()) @map("created_at")
+  id            String          @id @default(uuid()) @db.Uuid
+  reviewId      String          @map("review_id") @db.Uuid
+  label         String // "E1", "E2", ...
+  toolName      String          @map("tool_name")
+  args          Json
+  result        Json
+  kind          String          @default("WEB") // EvidenceKind: "WEB" | "API"
+  sourceUrl     String?         @map("source_url")
+  sourceTitle   String?         @map("source_title")
+  publishedAt   DateTime?       @map("published_at") @db.Timestamptz
+  lowSample     Boolean         @default(false) @map("low_sample")
+  error         String?
+  review        Review          @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  citedBy       ClaimEvidence[]
+  createdAt     DateTime        @default(now()) @map("created_at")
 
   @@unique([reviewId, label])
   @@map("evidence")
