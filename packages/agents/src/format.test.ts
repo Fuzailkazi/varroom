@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { formatReview } from "./format.ts";
-import type { ReviewDebateResult } from "./index.ts";
+import type { ReviewRunResult } from "./index.ts";
 import type { EvidenceEntry } from "./pipeline.ts";
 import type { ClaimResult } from "./types.ts";
 
@@ -23,6 +23,7 @@ function evidence(label: string, claimOrder: number, error: string | null = null
 const testableClaim: ClaimResult = {
   order: 1,
   claimText: "Bellingham is better as a false 9 than as an 8",
+  entities: { player: "Bellingham", positionA: "false 9", positionB: "8" },
   type: "POSITIONAL_ROLE",
   verdict: "VERIFIED",
   reasoning: "Two sites agree.",
@@ -33,6 +34,7 @@ const testableClaim: ClaimResult = {
 const untestableClaim: ClaimResult = {
   order: 2,
   claimText: "Guardiola is overrated",
+  entities: { player: "", positionA: "" },
   type: "UNTESTABLE",
   verdict: "UNTESTABLE",
   reasoning: null,
@@ -40,20 +42,20 @@ const untestableClaim: ClaimResult = {
   confidence: null,
 };
 
-function result(overrides: Partial<ReviewDebateResult>): ReviewDebateResult {
+function result(overrides: Partial<ReviewRunResult>): ReviewRunResult {
   return {
     reviewId: "review-1",
-    status: "COMPLETE",
+    saved: true,
     claims: [testableClaim, untestableClaim],
     evidence: [evidence("E1", 1), evidence("E2", 1)],
     score: 100,
     decision: "CONFIRMED",
+    summary: "2 claims: 1 stands, 1 not testable",
     ...overrides,
   };
 }
 
 describe("formatReview", () => {
-  // covers: AC-8
   test("prints claims, then the evidence ledger, then verdicts, then the score", () => {
     const text = formatReview(result({}));
 
@@ -68,7 +70,6 @@ describe("formatReview", () => {
     expect(resultAt).toBeGreaterThan(verdictsAt);
   });
 
-  // covers: AC-8
   test("each ledger row shows its label, the claim it was gathered for, and the source", () => {
     const text = formatReview(result({}));
 
@@ -76,7 +77,6 @@ describe("formatReview", () => {
     expect(text).toContain("   https://E1.com");
   });
 
-  // covers: AC-8
   test("a failed search row shows its error instead of a source", () => {
     const text = formatReview(
       result({ evidence: [evidence("E1", 1, "Search timed out after 60s")] }),
@@ -85,7 +85,6 @@ describe("formatReview", () => {
     expect(text).toContain("E1 (for claim 1) ERROR: Search timed out after 60s");
   });
 
-  // covers: AC-8
   test("a testable claim's verdict lists the evidence labels it cites", () => {
     const text = formatReview(result({}));
 
@@ -93,7 +92,6 @@ describe("formatReview", () => {
     expect(text).toContain("Confidence: 0.8");
   });
 
-  // covers: AC-6
   test("an untestable claim is listed with a not checked note and gets no verdict line", () => {
     const text = formatReview(result({}));
 
@@ -102,7 +100,6 @@ describe("formatReview", () => {
     expect(text).not.toContain("Claim 2: UNTESTABLE");
   });
 
-  // covers: AC-7, AC-8
   test("prints the score and decision when there is a score", () => {
     const text = formatReview(result({ score: 0, decision: "OVERTURNED" }));
 
@@ -110,7 +107,6 @@ describe("formatReview", () => {
     expect(text).toContain("Decision: OVERTURNED");
   });
 
-  // covers: AC-7, AC-8
   test("says no testable claims when every claim is untestable", () => {
     const text = formatReview(
       result({ claims: [untestableClaim], evidence: [], score: null, decision: "INCONCLUSIVE" }),

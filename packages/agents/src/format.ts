@@ -1,11 +1,11 @@
-import type { ReviewDebateResult } from "./index.ts";
+import type { ReviewRunResult } from "./index.ts";
 
 // Turns a finished review into the text the CLI prints, in this order:
 // 1. the extracted claims
 // 2. the evidence ledger
 // 3. each testable claim's verdict and the evidence labels it cites
 // 4. the final score and decision
-export function formatReview(result: ReviewDebateResult): string {
+export function formatReview(result: ReviewRunResult): string {
   const lines: string[] = [];
 
   // 1. Claims

@@ -3,12 +3,14 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createApp } from "../app.ts";
 import { loadEnv } from "../env.ts";
+import type { ReviewRunnerOptions } from "../reviews/runner.ts";
 
 // dummy secret for tests
 const TEST_SECRET = "test-secret-that-is-at-least-32-characters";
 
 // spins up a test server on a random open port
-export async function startTestServer() {
+// reviewRunnerOptions: fake agents / search / a short timeout for the review tests
+export async function startTestServer(reviewRunnerOptions: ReviewRunnerOptions = {}) {
   // 1. Start an empty server on port 0, which means "any free port".
   const server: Server = createServer();
   await new Promise<void>((resolve) => {
@@ -29,7 +31,7 @@ export async function startTestServer() {
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || TEST_SECRET,
     BETTER_AUTH_URL: baseUrl,
   });
-  const app = createApp(env);
+  const app = createApp(env, reviewRunnerOptions);
   server.on("request", app);
 
   return { server, baseUrl };

@@ -35,7 +35,6 @@ afterEach(() => {
 });
 
 describe("searchWeb", () => {
-  // covers: AC-2
   test("returns one source per grounding chunk, with its url and title", async () => {
     fakeChunks = [
       { web: { uri: "https://a.com/1", title: "a.com" } },

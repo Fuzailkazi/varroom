@@ -8,7 +8,7 @@
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
-  previewFeatures = ["typedSql"]
+  previewFeatures = ["typedSql", "partialIndexes"]
 }
 
 datasource db {
@@ -166,6 +166,7 @@ model User {
   debates         Debate[]
   votes           DebateVote[]
   comments        Comment[]
+  requestedReviews Review[]    @relation("ReviewRequester")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
@@ -350,6 +351,9 @@ model Review {
   outputTokens     Int           @default(0) @map("output_tokens")
   costUsd          Decimal?      @map("cost_usd") @db.Decimal(10, 6)
   debate           Debate        @relation(fields: [debateId], references: [id], onDelete: Cascade)
+  // who asked for it. only used for the daily cap, never shown. null = account deleted
+  requestedById    String?       @map("requested_by_id")
+  requestedBy      User?         @relation("ReviewRequester", fields: [requestedById], references: [id], onDelete: SetNull)
   claims           Claim[]
   evidence         Evidence[]
   events           ReviewEvent[]
@@ -359,6 +363,10 @@ model Review {
 
   @@index([debateId])
   @@index([status])
+  // daily cap: count one fan's reviews in the last 24h
+  @@index([requestedById, createdAt])
+  // one live or finished review per debate. failed ones don't block a retry
+  @@unique([debateId], where: raw("status <> 'FAILED'"), map: "reviews_one_live_review_per_debate")
   @@map("reviews")
 }
 

@@ -1,129 +1,176 @@
 import { prisma } from "./client.ts";
+import type { Prisma } from "./generated/prisma/client.ts";
 
-// DB access for VAR reviews, claims, evidence, and claim_evidence.
-// The agent pipeline goes through these, never prisma directly.
+// db access for var reviews, their claims, evidence and progress events.
+// the agents and the api go through these, never prisma directly
+
+// finishing a review writes several rows in one go, over a few neon round trips
+const TRANSACTION_OPTIONS = { maxWait: 5000, timeout: 20000 };
+
+// a review is still live while it's QUEUED or RUNNING. anything else is final
+const LIVE_STATUSES: ("QUEUED" | "RUNNING")[] = ["QUEUED", "RUNNING"];
+
+export type ReviewStatusValue = "QUEUED" | "RUNNING" | "COMPLETE" | "FAILED";
+export type DecisionValue = "CONFIRMED" | "OVERTURNED" | "INCONCLUSIVE";
+
+// the few review fields the start endpoint returns
+export type ReviewSummaryRow = {
+  id: string;
+  debateId: string;
+  status: ReviewStatusValue;
+  createdAt: Date;
+};
+
+// helpers
+
+// postgres unique violation, e.g. a second live review for the same debate
+function isUniqueViolation(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) {
+    return false;
+  }
+  const code = (err as { code?: unknown }).code;
+  return code === "P2002";
+}
+
+// starting a review
 
 export type NewReview = {
   debateId: string;
   model: string;
+  requestedById: string | null; // null for the cli
 };
 
-// Creates a review row in QUEUED status and returns its id.
-export async function createReview(input: NewReview): Promise<string> {
-  const review = await prisma.review.create({
-    data: {
-      debateId: input.debateId,
-      status: "QUEUED",
-      model: input.model,
-    },
-    select: { id: true },
+// outcome "created" = a new QUEUED review. "exists" = the debate already had a live
+// or finished review (maybe created a moment ago by someone else), returned instead
+export type CreateReviewResult = {
+  outcome: "created" | "exists";
+  review: ReviewSummaryRow;
+};
+
+// the one review of a debate that isn't FAILED, or null. the unique index allows at most one
+export async function findLiveReview(debateId: string): Promise<ReviewSummaryRow | null> {
+  const review = await prisma.review.findFirst({
+    where: { debateId: debateId, status: { not: "FAILED" } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, debateId: true, status: true, createdAt: true },
   });
-  return review.id;
+  return review;
 }
 
-// Moves the review to RUNNING and records the start time.
-export async function startReview(reviewId: string): Promise<void> {
-  await prisma.review.update({
-    where: { id: reviewId },
-    data: {
-      status: "RUNNING",
-      startedAt: new Date(),
-    },
-  });
-}
-
-// Marks the review COMPLETE and records the final score, decision, and token counts.
-export async function completeReview(
-  reviewId: string,
-  score: number | null,
-  decision: "CONFIRMED" | "OVERTURNED" | "INCONCLUSIVE",
-  inputTokens: number,
-  outputTokens: number,
-): Promise<void> {
-  await prisma.review.update({
-    where: { id: reviewId },
-    data: {
-      status: "COMPLETE",
-      credibilityScore: score,
-      decision: decision,
-      inputTokens: inputTokens,
-      outputTokens: outputTokens,
-      completedAt: new Date(),
-    },
-  });
-
-  // Mirror the score onto the debate so the board can show the latest result
-  // without joining to reviews. Only update when this review actually produced a score.
-  if (score !== null) {
-    const review = await prisma.review.findUnique({
-      where: { id: reviewId },
-      select: { debateId: true },
+// creates a QUEUED review. if two requests race, the unique index rejects the second
+// insert and we hand back the winner instead
+export async function createReview(input: NewReview): Promise<CreateReviewResult> {
+  try {
+    const review = await prisma.review.create({
+      data: {
+        debateId: input.debateId,
+        status: "QUEUED",
+        model: input.model,
+        requestedById: input.requestedById,
+      },
+      select: { id: true, debateId: true, status: true, createdAt: true },
     });
-    if (review) {
-      await prisma.debate.update({
-        where: { id: review.debateId },
-        data: { credibilityScore: score },
-      });
+    return { outcome: "created", review: review };
+  } catch (err) {
+    if (!isUniqueViolation(err)) {
+      throw err;
     }
+    const existing = await findLiveReview(input.debateId);
+    if (!existing) {
+      // it failed between the insert and this read. rare, let the caller retry
+      throw err;
+    }
+    return { outcome: "exists", review: existing };
   }
 }
 
-// Marks the review FAILED and records why. Rows already written are kept.
-export async function failReview(reviewId: string, reason: string): Promise<void> {
-  await prisma.review.update({
-    where: { id: reviewId },
-    data: {
-      status: "FAILED",
-      failureReason: reason,
-      completedAt: new Date(),
+// daily cap: how many reviews this fan started since `since` (failed ones don't count),
+// and when the oldest of those started, so we can say when a slot frees up
+export async function getReviewCapUsage(userId: string, since: Date): Promise<{ count: number; oldestCreatedAt: Date | null }> {
+  const rows = await prisma.review.findMany({
+    where: {
+      requestedById: userId,
+      createdAt: { gt: since },
+      status: { not: "FAILED" },
     },
+    orderBy: { createdAt: "asc" },
+    select: { createdAt: true },
   });
+
+  let oldestCreatedAt: Date | null = null;
+  if (rows.length > 0) {
+    oldestCreatedAt = rows[0]!.createdAt;
+  }
+  return { count: rows.length, oldestCreatedAt: oldestCreatedAt };
 }
 
-export type NewClaim = {
-  reviewId: string;
-  order: number;
-  claimText: string;
-  type: "POSITIONAL_ROLE" | "UNTESTABLE";
-  entities: unknown;
-};
+// the text the agents review: title, a blank line, then the thesis. null if the debate is gone
+export async function getDebateText(debateId: string): Promise<string | null> {
+  const debate = await prisma.debate.findUnique({
+    where: { id: debateId },
+    select: { title: true, thesis: true },
+  });
+  if (!debate) {
+    return null;
+  }
+  return `${debate.title}\n\n${debate.thesis}`;
+}
 
-// Creates a claim row in PENDING status and returns its id.
-export async function createClaim(input: NewClaim): Promise<string> {
-  const claim = await prisma.claim.create({
+// running a review
+
+// QUEUED -> RUNNING. false if the review isn't QUEUED anymore (or was deleted)
+export async function startReview(reviewId: string): Promise<boolean> {
+  const updated = await prisma.review.updateMany({
+    where: { id: reviewId, status: "QUEUED" },
+    data: { status: "RUNNING", startedAt: new Date() },
+  });
+  return updated.count === 1;
+}
+
+// saves one progress event and returns its id (a string, it's a bigint in the db)
+export async function addReviewEvent(reviewId: string, seq: number, type: string, payload: unknown): Promise<string> {
+  const event = await prisma.reviewEvent.create({
     data: {
-      reviewId: input.reviewId,
-      order: input.order,
-      claimText: input.claimText,
-      type: input.type,
+      reviewId: reviewId,
+      seq: seq,
+      type: type,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      entities: input.entities as any,
-      verdict: "PENDING",
+      payload: payload as any,
     },
     select: { id: true },
   });
-  return claim.id;
+  return event.id.toString();
 }
 
-// Updates the claim's verdict, reasoning, and confidence once the pipeline is done.
-export async function updateClaim(
-  claimId: string,
-  verdict: "VERIFIED" | "PARTIALLY_TRUE" | "REFUTED" | "INSUFFICIENT_DATA",
-  reasoning: string | null,
-  confidence: number | null,
-): Promise<void> {
-  await prisma.claim.update({
-    where: { id: claimId },
-    data: {
-      verdict: verdict,
-      reasoning: reasoning,
-      confidence: confidence,
-    },
+export type ReviewEventRow = {
+  id: string;
+  type: string;
+  payload: unknown;
+};
+
+// saved events of a review with an id above afterId (all of them when afterId is null), oldest first
+export async function listReviewEventsAfter(reviewId: string, afterId: bigint | null): Promise<ReviewEventRow[]> {
+  let where: Prisma.ReviewEventWhereInput = { reviewId: reviewId };
+  if (afterId !== null) {
+    where = { reviewId: reviewId, id: { gt: afterId } };
+  }
+
+  const rows = await prisma.reviewEvent.findMany({
+    where: where,
+    orderBy: { id: "asc" },
+    select: { id: true, type: true, payload: true },
   });
+
+  const events: ReviewEventRow[] = [];
+  for (const row of rows) {
+    events.push({ id: row.id.toString(), type: row.type, payload: row.payload });
+  }
+  return events;
 }
 
-export type NewEvidence = {
-  reviewId: string;
+// finishing a review
+
+export type FinishedEvidence = {
   label: string;
   toolName: string;
   args: unknown;
@@ -135,31 +182,281 @@ export type NewEvidence = {
   error: string | null;
 };
 
-// Creates an evidence row and returns its id.
-export async function createEvidence(input: NewEvidence): Promise<string> {
-  const evidence = await prisma.evidence.create({
-    data: {
-      reviewId: input.reviewId,
-      label: input.label,
-      toolName: input.toolName,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      args: input.args as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      result: input.result as any,
-      kind: input.kind,
-      sourceUrl: input.sourceUrl,
-      sourceTitle: input.sourceTitle,
-      publishedAt: input.publishedAt,
-      error: input.error,
-    },
-    select: { id: true },
-  });
-  return evidence.id;
+export type FinishedClaim = {
+  order: number;
+  claimText: string;
+  type: "POSITIONAL_ROLE" | "UNTESTABLE";
+  entities: unknown;
+  // PENDING for untestable claims, they're never judged
+  verdict: "PENDING" | "VERIFIED" | "PARTIALLY_TRUE" | "REFUTED" | "INSUFFICIENT_DATA";
+  reasoning: string | null;
+  confidence: number | null;
+  citedLabels: string[];
+};
+
+export type FinishedReview = {
+  score: number | null;
+  decision: DecisionValue;
+  summary: string;
+  inputTokens: number;
+  outputTokens: number;
+  evidence: FinishedEvidence[];
+  claims: FinishedClaim[];
+};
+
+// saves a finished review in one transaction: marks it COMPLETE, writes the evidence,
+// claims and citation links, drops its progress events, and copies the score onto the debate.
+// returns false (and writes nothing) if the review already ended, e.g. it timed out
+export async function finishReviewComplete(reviewId: string, finished: FinishedReview): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    // 1. only a live review can be completed. this is what drops a late result
+    const updated = await tx.review.updateMany({
+      where: { id: reviewId, status: { in: LIVE_STATUSES } },
+      data: {
+        status: "COMPLETE",
+        credibilityScore: finished.score,
+        decision: finished.decision,
+        summary: finished.summary,
+        inputTokens: finished.inputTokens,
+        outputTokens: finished.outputTokens,
+        completedAt: new Date(),
+      },
+    });
+    if (updated.count === 0) {
+      return false;
+    }
+
+    // 2. evidence rows, remembering each label's new row id for the links
+    const evidenceIdByLabel = new Map<string, string>();
+    for (const entry of finished.evidence) {
+      const row = await tx.evidence.create({
+        data: {
+          reviewId: reviewId,
+          label: entry.label,
+          toolName: entry.toolName,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          args: entry.args as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          result: entry.result as any,
+          kind: entry.kind,
+          sourceUrl: entry.sourceUrl,
+          sourceTitle: entry.sourceTitle,
+          publishedAt: entry.publishedAt,
+          error: entry.error,
+        },
+        select: { id: true },
+      });
+      evidenceIdByLabel.set(entry.label, row.id);
+    }
+
+    // 3. claims plus the evidence each one cites
+    for (const claim of finished.claims) {
+      const row = await tx.claim.create({
+        data: {
+          reviewId: reviewId,
+          order: claim.order,
+          claimText: claim.claimText,
+          type: claim.type,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          entities: claim.entities as any,
+          verdict: claim.verdict,
+          reasoning: claim.reasoning,
+          confidence: claim.confidence,
+        },
+        select: { id: true },
+      });
+
+      for (const label of claim.citedLabels) {
+        const evidenceId = evidenceIdByLabel.get(label);
+        if (evidenceId) {
+          await tx.claimEvidence.create({ data: { claimId: row.id, evidenceId: evidenceId } });
+        }
+      }
+    }
+
+    // 4. progress events are only for the live stream, the saved rows cover the rest
+    await tx.reviewEvent.deleteMany({ where: { reviewId: reviewId } });
+
+    // 5. the board shows the newest completed score. skip when there's no score
+    if (finished.score !== null) {
+      const review = await tx.review.findUnique({ where: { id: reviewId }, select: { debateId: true } });
+      if (review) {
+        await tx.debate.update({ where: { id: review.debateId }, data: { credibilityScore: finished.score } });
+      }
+    }
+
+    return true;
+  }, TRANSACTION_OPTIONS);
 }
 
-// Links a claim to the evidence it cited.
-export async function createClaimEvidence(claimId: string, evidenceId: string): Promise<void> {
-  await prisma.claimEvidence.create({
-    data: { claimId, evidenceId },
+// marks a live review FAILED and drops its progress events, in one transaction.
+// reason is "<kind>: <detail>", e.g. "timeout: ...". false if it had already ended
+export async function finishReviewFailed(reviewId: string, reason: string): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.review.updateMany({
+      where: { id: reviewId, status: { in: LIVE_STATUSES } },
+      data: { status: "FAILED", failureReason: reason, completedAt: new Date() },
+    });
+    if (updated.count === 0) {
+      return false;
+    }
+    await tx.reviewEvent.deleteMany({ where: { reviewId: reviewId } });
+    return true;
+  }, TRANSACTION_OPTIONS);
+}
+
+// on api start: any review still QUEUED or RUNNING was cut off by the restart.
+// fails them all and returns their ids
+export async function failInterruptedReviews(reason: string): Promise<string[]> {
+  const stuck = await prisma.review.findMany({
+    where: { status: { in: LIVE_STATUSES } },
+    select: { id: true },
   });
+
+  const ids: string[] = [];
+  for (const review of stuck) {
+    const failed = await finishReviewFailed(review.id, reason);
+    if (failed) {
+      ids.push(review.id);
+    }
+  }
+  return ids;
+}
+
+// reading a review
+
+// status and result fields, enough for the stream's final event
+export type ReviewStateRow = {
+  id: string;
+  debateId: string;
+  status: ReviewStatusValue;
+  decision: DecisionValue | null;
+  credibilityScore: number | null;
+  summary: string | null;
+  failureReason: string | null;
+};
+
+export async function getReviewState(reviewId: string): Promise<ReviewStateRow | null> {
+  const review = await prisma.review.findUnique({
+    where: { id: reviewId },
+    select: {
+      id: true,
+      debateId: true,
+      status: true,
+      decision: true,
+      credibilityScore: true,
+      summary: true,
+      failureReason: true,
+    },
+  });
+  return review;
+}
+
+export type ReviewDetailClaim = {
+  order: number;
+  claimText: string;
+  type: "POSITIONAL_ROLE" | "UNTESTABLE" | "COMPARISON" | "TEAM_TACTIC" | "TRANSFER_FIT";
+  entities: unknown;
+  verdict: "PENDING" | "VERIFIED" | "PARTIALLY_TRUE" | "REFUTED" | "INSUFFICIENT_DATA";
+  reasoning: string | null;
+  confidence: number | null;
+  citedLabels: string[];
+};
+
+export type ReviewDetailEvidence = {
+  label: string;
+  args: unknown;
+  kind: string;
+  sourceUrl: string | null;
+  sourceTitle: string | null;
+  publishedAt: Date | null;
+  error: string | null;
+};
+
+export type ReviewDetailRow = {
+  id: string;
+  debateId: string;
+  status: ReviewStatusValue;
+  decision: DecisionValue | null;
+  credibilityScore: number | null;
+  summary: string | null;
+  failureReason: string | null;
+  createdAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  claims: ReviewDetailClaim[];
+  evidence: ReviewDetailEvidence[];
+};
+
+// a whole review with its claims, cited labels and evidence. null if it doesn't exist
+export async function getReviewDetail(reviewId: string): Promise<ReviewDetailRow | null> {
+  const review = await prisma.review.findUnique({
+    where: { id: reviewId },
+    include: {
+      claims: {
+        orderBy: { order: "asc" },
+        include: { citations: { include: { evidence: { select: { label: true } } } } },
+      },
+      evidence: true,
+    },
+  });
+  if (!review) {
+    return null;
+  }
+
+  const claims: ReviewDetailClaim[] = [];
+  for (const claim of review.claims) {
+    const citedLabels: string[] = [];
+    for (const citation of claim.citations) {
+      citedLabels.push(citation.evidence.label);
+    }
+    citedLabels.sort(compareLabels);
+
+    claims.push({
+      order: claim.order,
+      claimText: claim.claimText,
+      type: claim.type,
+      entities: claim.entities,
+      verdict: claim.verdict,
+      reasoning: claim.reasoning,
+      confidence: claim.confidence,
+      citedLabels: citedLabels,
+    });
+  }
+
+  const evidence: ReviewDetailEvidence[] = [];
+  for (const row of review.evidence) {
+    evidence.push({
+      label: row.label,
+      args: row.args,
+      kind: row.kind,
+      sourceUrl: row.sourceUrl,
+      sourceTitle: row.sourceTitle,
+      publishedAt: row.publishedAt,
+      error: row.error,
+    });
+  }
+  evidence.sort((a, b) => compareLabels(a.label, b.label));
+
+  return {
+    id: review.id,
+    debateId: review.debateId,
+    status: review.status,
+    decision: review.decision,
+    credibilityScore: review.credibilityScore,
+    summary: review.summary,
+    failureReason: review.failureReason,
+    createdAt: review.createdAt,
+    startedAt: review.startedAt,
+    completedAt: review.completedAt,
+    claims: claims,
+    evidence: evidence,
+  };
+}
+
+// sorts "E2" before "E10" (plain string sort would put E10 first)
+function compareLabels(a: string, b: string): number {
+  const numberA = Number(a.slice(1));
+  const numberB = Number(b.slice(1));
+  return numberA - numberB;
 }

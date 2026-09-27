@@ -2,8 +2,8 @@
 // Usage: bun packages/agents/src/cli.ts "<debate text>"
 // Requires: GEMINI_API_KEY and VAR_CLI_USER_ID environment variables.
 
-import { createDebate } from "@varroom/db";
-import { reviewDebate } from "./index.ts";
+import { createDebate, createReview } from "@varroom/db";
+import { geminiModel, runReview } from "./index.ts";
 import { PipelineError } from "./types.ts";
 import { formatReview } from "./format.ts";
 
@@ -46,10 +46,18 @@ async function main() {
     process.exit(1);
   }
 
+  // the review row comes first, the same way the api does it
+  const created = await createReview({ debateId: debateId, model: geminiModel(), requestedById: userId });
+  const reviewId = created.review.id;
+
   console.log(`\nReviewing debate ${debateId}...\n`);
 
   try {
-    const result = await reviewDebate(debateId, text);
+    const result = await runReview(reviewId, text);
+    if (!result) {
+      console.error("The review was not QUEUED anymore, nothing to run.");
+      process.exit(1);
+    }
     console.log(formatReview(result));
   } catch (err) {
     if (err instanceof PipelineError) {

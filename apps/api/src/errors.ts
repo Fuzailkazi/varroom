@@ -5,6 +5,7 @@ import type { ErrorResponse, FieldError } from "@varroom/shared";
 export type ErrorExtras = {
   fields?: FieldError[]; // VALIDATION_FAILED
   existingId?: string | null; // DUPLICATE_DEBATE, DUPLICATE_COMMENT
+  retryAt?: string; // REVIEW_LIMIT_REACHED
 };
 
 // Every error our own routes send looks the same:
@@ -19,6 +20,9 @@ export function sendError(res: Response, status: number, code: string, message: 
   }
   if (extras.existingId) {
     body.error.existingId = extras.existingId;
+  }
+  if (extras.retryAt) {
+    body.error.retryAt = extras.retryAt;
   }
   res.status(status).json(body);
 }

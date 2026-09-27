@@ -33,10 +33,17 @@ export type PipelineOutput = {
   decision: ReviewResult["decision"];
 };
 
+// called once the moderator has split the text into claims. the api uses it to stream progress
+export type ClaimsExtractedFn = (claims: Claim[]) => Promise<void>;
+
 export type PipelineOptions = {
   searchWebFn?: SearchWebFn;
   runAgentFn?: RunAgentFn;
+  onClaimsExtracted?: ClaimsExtractedFn;
 };
+
+// error text on the evidence row when a search worked but found nothing
+export const NO_SOURCES_ERROR = "No sources returned";
 
 // Returns which website an evidence row came from, used to count
 // independent sources. Gemini grounding gives every source a Google
@@ -53,6 +60,23 @@ function sourceSite(entry: EvidenceEntry): string {
     return entry.sourceTitle ?? host;
   }
   return host;
+}
+
+// true when there was at least one search and every one threw an error.
+// "no sources" is a search that worked but found nothing, so it doesn't count
+function everySearchThrew(entries: EvidenceEntry[]): boolean {
+  if (entries.length === 0) {
+    return false;
+  }
+  for (const entry of entries) {
+    if (entry.error === null) {
+      return false;
+    }
+    if (entry.error === NO_SOURCES_ERROR) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // Builds a grounded search query from a claim's extracted entities.
@@ -118,11 +142,11 @@ async function defaultRunAgent(agent: LlmAgent, input: string): Promise<string> 
 // searchWebFn and runAgentFn are injectable for unit testing.
 export async function runPipeline(
   text: string,
-  { searchWebFn = realSearchWeb, runAgentFn = defaultRunAgent }: PipelineOptions = {}
+  { searchWebFn = realSearchWeb, runAgentFn = defaultRunAgent, onClaimsExtracted }: PipelineOptions = {}
 ): Promise<PipelineOutput> {
   const model = process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL;
 
-  // -- Moderator: extract claims -------------------------------------------
+  // moderator: split the text into claims
   const moderator = new LlmAgent({
     name: "moderator",
     model,
@@ -150,9 +174,13 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
     );
   }
 
-  // -- Search loop: one searchWeb call per POSITIONAL_ROLE claim ------------
-  // The label counter is per pipeline run (not per process), so two concurrent
-  // reviews of the same debate each get their own E1, E2, ... sequence.
+  // let the caller know the claims (outside the try so its errors aren't blamed on the moderator)
+  if (onClaimsExtracted) {
+    await onClaimsExtracted(parsedClaims);
+  }
+
+  // search loop: code runs one search per checkable claim, the model never decides this.
+  // labels count per run, so two reviews running at once each get their own E1, E2, ...
   const evidenceEntries: EvidenceEntry[] = [];
   let labelCounter = 0;
 
@@ -177,8 +205,7 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
     }
 
     if (searchError !== null || sources.length === 0) {
-      // Spec invariant: always write at least one evidence row per search
-      // call, even on failure, so the AC-5 pre-check has something to read.
+      // always one row per search, even on failure, so the check below can see it
       labelCounter++;
       evidenceEntries.push({
         label: `E${labelCounter}`,
@@ -189,10 +216,10 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
         sourceUrl: null,
         sourceTitle: null,
         publishedAt: null,
-        error: searchError ?? "No sources returned",
+        error: searchError ?? NO_SOURCES_ERROR,
       });
     } else {
-      // afterToolCallback: one row per source returned by the search.
+      // one evidence row per source the search returned
       for (const source of sources) {
         labelCounter++;
         evidenceEntries.push({
@@ -210,11 +237,18 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
     }
   }
 
-  // -- AC-5 pre-check: which claims have at least one usable evidence row? --
+  // every search threw (outage, quota) -> fail the review so it can be retried,
+  // instead of stamping "check incomplete" on the debate for good
+  if (everySearchThrew(evidenceEntries)) {
+    const firstError = evidenceEntries[0]?.error ?? "unknown error";
+    throw new PipelineError(`Every search failed: ${firstError}`, "search");
+  }
+
+  // which claims have at least one usable evidence row?
   const usableEvidence = evidenceEntries.filter((e) => e.error === null);
   const claimsWithEvidence = new Set(usableEvidence.map((e) => e.args.claimOrder));
 
-  // -- Fact Checker: only sent claims that passed the AC-5 pre-check --------
+  // fact checker: only sees claims that have usable evidence
   const testableClaims = parsedClaims.filter(
     (c) => c.type === "POSITIONAL_ROLE" && claimsWithEvidence.has(c.order)
   );
@@ -253,7 +287,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
     }
   }
 
-  // -- Build ClaimResult[] with citation validation -------------------------
+  // build the final claim results, checking every citation
   const verdictMap = new Map(verdicts.map((v) => [v.claimOrder, v]));
 
   const evidenceRecords: EvidenceRecord[] = evidenceEntries.map((e) => ({
@@ -263,11 +297,12 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
   }));
 
   const claimResults: ClaimResult[] = parsedClaims.map((claim) => {
-    // AC-6: untestable claims are never searched or judged.
+    // untestable claims are never searched or judged
     if (claim.type === "UNTESTABLE") {
       return {
         order: claim.order,
         claimText: claim.claimText,
+        entities: claim.entities,
         type: "UNTESTABLE",
         verdict: "UNTESTABLE",
         reasoning: null,
@@ -276,11 +311,12 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
       };
     }
 
-    // AC-5: no usable evidence — skip Fact Checker for this claim.
+    // no usable evidence, the fact checker never saw this claim
     if (!claimsWithEvidence.has(claim.order)) {
       return {
         order: claim.order,
         claimText: claim.claimText,
+        entities: claim.entities,
         type: "POSITIONAL_ROLE",
         verdict: "INSUFFICIENT_DATA",
         reasoning: "No usable evidence was found for this claim.",
@@ -289,12 +325,13 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
       };
     }
 
-    // AC-4: Fact Checker omitted this claim from its verdicts.
+    // the fact checker left this claim out of its answer
     const verdict = verdictMap.get(claim.order);
     if (!verdict) {
       return {
         order: claim.order,
         claimText: claim.claimText,
+        entities: claim.entities,
         type: "POSITIONAL_ROLE",
         verdict: "INSUFFICIENT_DATA",
         reasoning: "The Fact Checker did not return a verdict for this claim.",
@@ -303,7 +340,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
       };
     }
 
-    // AC-3/AC-4: every cited label must exist and belong to this claim.
+    // every cited label must exist and belong to this claim, or the verdict is thrown out
     const citationCheck = validateCitations(verdict.citedLabels, claim.order, evidenceRecords);
     if (!citationCheck.ok) {
       const detail =
@@ -313,6 +350,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
       return {
         order: claim.order,
         claimText: claim.claimText,
+        entities: claim.entities,
         type: "POSITIONAL_ROLE",
         verdict: "INSUFFICIENT_DATA",
         reasoning: `Citation check failed (${detail}).`,
@@ -332,6 +370,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
     return {
       order: claim.order,
       claimText: claim.claimText,
+      entities: claim.entities,
       type: "POSITIONAL_ROLE",
       verdict: verdict.verdict,
       reasoning: verdict.reasoning,

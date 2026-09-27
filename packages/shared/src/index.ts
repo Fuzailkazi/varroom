@@ -18,5 +18,21 @@ export {
   nextVoteAction,
 } from "./debates.ts";
 export { ErrorResponse, FieldError } from "./errors.ts";
+export {
+  ClaimsExtractedEvent,
+  FailureCategory,
+  REVIEW_DAILY_LIMIT,
+  REVIEW_LIMIT_WINDOW_MS,
+  REVIEW_TIMEOUT_MS,
+  ReviewClaim,
+  ReviewCompletedEvent,
+  ReviewDecision,
+  ReviewEvidence,
+  ReviewFailedEvent,
+  ReviewFailure,
+  ReviewResponse,
+  ReviewStatus,
+  StartReviewResponse,
+} from "./reviews.ts";
 export { HealthResponse } from "./health.ts";
 export { MeResponse } from "./me.ts";

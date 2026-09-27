@@ -7,6 +7,7 @@ function claim(verdict: ClaimResult["verdict"]): ClaimResult {
   return {
     order: 1,
     claimText: "test claim",
+    entities: { player: "Player", positionA: "9" },
     type: "POSITIONAL_ROLE",
     verdict,
     reasoning: null,

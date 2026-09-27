@@ -12,6 +12,7 @@
     "apps/api": {
       "name": "@varroom/api",
       "dependencies": {
+        "@varroom/agents": "workspace:*",
         "@varroom/db": "workspace:*",
         "@varroom/shared": "workspace:*",
         "better-auth": "^1.7.5",

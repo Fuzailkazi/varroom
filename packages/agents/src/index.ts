@@ -1,106 +1,145 @@
-import {
-  createReview,
-  startReview,
-  completeReview,
-  failReview,
-  createClaim,
-  updateClaim,
-  createEvidence,
-  createClaimEvidence,
-} from "@varroom/db";
-import { PipelineError, DEFAULT_GEMINI_MODEL } from "./types.ts";
-import type { ReviewResult } from "./types.ts";
+import { finishReviewComplete, finishReviewFailed, startReview } from "@varroom/db";
+import type { FinishedClaim, FinishedEvidence } from "@varroom/db";
+import { DEFAULT_GEMINI_MODEL, PipelineError } from "./types.ts";
+import type { ClaimResult } from "./types.ts";
 import { runPipeline } from "./pipeline.ts";
-import type { PipelineOptions, EvidenceEntry } from "./pipeline.ts";
+import type { EvidenceEntry, PipelineOptions, PipelineOutput } from "./pipeline.ts";
+import { buildSummary } from "./summary.ts";
 
-// The review result plus the evidence ledger, so callers like the CLI can print it.
-export type ReviewDebateResult = ReviewResult & { evidence: EvidenceEntry[] };
+// the agent pipeline's entry point. the caller (api or cli) creates the review row,
+// then runReview runs the agents on it and saves the result
 
-// The main entry point for the agent pipeline. Creates a Review row, runs
-// the Moderator -> search -> Fact Checker pipeline, persists the results,
-// and returns a ReviewResult. If any step fails, the review is marked FAILED
-// and the error is rethrown so the caller (the CLI or the future API) can
-// report it. Rows already written are kept — there is no rollback.
-export async function reviewDebate(
-  debateId: string,
-  text: string,
-  options?: PipelineOptions,
-): Promise<ReviewDebateResult> {
-  const model = process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL;
+// what runReview hands back once the pipeline finished
+export type ReviewRunResult = {
+  reviewId: string;
+  saved: boolean; // false = the review had already ended (e.g. timed out), nothing was written
+  claims: ClaimResult[];
+  evidence: EvidenceEntry[];
+  score: number | null;
+  decision: "CONFIRMED" | "OVERTURNED" | "INCONCLUSIVE";
+  summary: string;
+};
 
-  // Create the review row first so every subsequent write has a reviewId.
-  const reviewId = await createReview({ debateId, model });
+// the gemini model reviews run on, also stored on the review row
+export function geminiModel(): string {
+  const fromEnv = process.env.GEMINI_MODEL;
+  if (fromEnv) {
+    return fromEnv;
+  }
+  return DEFAULT_GEMINI_MODEL;
+}
 
+// turns any error into the "<kind>: <detail>" text saved in failure_reason
+export function failureReasonFor(err: unknown): string {
+  if (err instanceof PipelineError) {
+    return `${err.step}: ${err.message}`;
+  }
+  if (err instanceof Error) {
+    return `internal: ${err.message}`;
+  }
+  return `internal: ${String(err)}`;
+}
+
+// runs a QUEUED review: marks it RUNNING, runs moderator -> search -> fact checker,
+// then saves claims, evidence and score in one go. returns null when the review
+// wasn't QUEUED anymore (already ended or deleted). on a pipeline error the review
+// is marked FAILED and the error is thrown again
+export async function runReview(reviewId: string, text: string, options: PipelineOptions = {}): Promise<ReviewRunResult | null> {
+  const started = await startReview(reviewId);
+  if (!started) {
+    return null;
+  }
+
+  // 1. run the agents
+  let output: PipelineOutput;
   try {
-    await startReview(reviewId);
+    output = await runPipeline(text, options);
+  } catch (err) {
+    await markFailed(reviewId, failureReasonFor(err));
+    throw err;
+  }
 
-    const output = await runPipeline(text, options);
-
-    // Persist evidence rows (written by code, scoped to this review).
-    const evidenceIdByLabel = new Map<string, string>();
-    for (const entry of output.evidence) {
-      const evidenceId = await createEvidence({
-        reviewId,
-        label: entry.label,
-        toolName: entry.toolName,
-        args: entry.args,
-        result: entry.result,
-        kind: entry.kind,
-        sourceUrl: entry.sourceUrl,
-        sourceTitle: entry.sourceTitle,
-        publishedAt: entry.publishedAt,
-        error: entry.error,
-      });
-      evidenceIdByLabel.set(entry.label, evidenceId);
-    }
-
-    // Persist claim rows and their verdicts.
-    for (const claim of output.claims) {
-      const claimId = await createClaim({
-        reviewId,
-        order: claim.order,
-        claimText: claim.claimText,
-        type: claim.type === "UNTESTABLE" ? "UNTESTABLE" : "POSITIONAL_ROLE",
-        entities: {},
-      });
-
-      if (claim.verdict !== "UNTESTABLE") {
-        await updateClaim(claimId, claim.verdict, claim.reasoning, claim.confidence);
-      }
-
-      // Link the claim to its cited evidence rows.
-      for (const label of claim.citedLabels) {
-        const evidenceId = evidenceIdByLabel.get(label);
-        if (evidenceId) {
-          await createClaimEvidence(claimId, evidenceId);
-        }
-      }
-    }
-
-    await completeReview(reviewId, output.score, output.decision, 0, 0);
-
-    return {
-      reviewId,
-      status: "COMPLETE",
-      claims: output.claims,
+  // 2. save everything. finishReviewComplete skips the write if the review already ended
+  const summary = buildSummary(output.claims);
+  let saved = false;
+  try {
+    saved = await finishReviewComplete(reviewId, {
       score: output.score,
       decision: output.decision,
-      evidence: output.evidence,
-    };
-  } catch (err) {
-    const reason =
-      err instanceof PipelineError
-        ? `${err.step}: ${err.message}`
-        : err instanceof Error
-          ? err.message
-          : String(err);
-
-    await failReview(reviewId, reason).catch(() => {
-      // never let a failReview write error shadow the original error
+      summary: summary,
+      inputTokens: 0, // token counting comes later, with usage tracking
+      outputTokens: 0,
+      evidence: toFinishedEvidence(output.evidence),
+      claims: toFinishedClaims(output.claims),
     });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await markFailed(reviewId, `persist: ${message}`);
+    throw new PipelineError(`Saving the review failed: ${message}`, "persist");
+  }
 
-    throw err;
+  return {
+    reviewId: reviewId,
+    saved: saved,
+    claims: output.claims,
+    evidence: output.evidence,
+    score: output.score,
+    decision: output.decision,
+    summary: summary,
+  };
+}
+
+// helpers
+
+// marks the review FAILED but never lets that write hide the original error
+async function markFailed(reviewId: string, reason: string): Promise<void> {
+  try {
+    await finishReviewFailed(reviewId, reason);
+  } catch (err) {
+    console.error(`could not mark review ${reviewId} as failed:`, err);
   }
 }
 
-export type { ReviewResult };
+function toFinishedEvidence(entries: EvidenceEntry[]): FinishedEvidence[] {
+  const rows: FinishedEvidence[] = [];
+  for (const entry of entries) {
+    rows.push({
+      label: entry.label,
+      toolName: entry.toolName,
+      args: entry.args,
+      result: entry.result,
+      kind: entry.kind,
+      sourceUrl: entry.sourceUrl,
+      sourceTitle: entry.sourceTitle,
+      publishedAt: entry.publishedAt,
+      error: entry.error,
+    });
+  }
+  return rows;
+}
+
+function toFinishedClaims(claims: ClaimResult[]): FinishedClaim[] {
+  const rows: FinishedClaim[] = [];
+  for (const claim of claims) {
+    // untestable claims are never judged, so they stay PENDING in the db
+    let verdict: "PENDING" | "VERIFIED" | "PARTIALLY_TRUE" | "REFUTED" | "INSUFFICIENT_DATA" = "PENDING";
+    if (claim.verdict !== "UNTESTABLE") {
+      verdict = claim.verdict;
+    }
+
+    rows.push({
+      order: claim.order,
+      claimText: claim.claimText,
+      type: claim.type,
+      entities: claim.entities,
+      verdict: verdict,
+      reasoning: claim.reasoning,
+      confidence: claim.confidence,
+      citedLabels: claim.citedLabels,
+    });
+  }
+  return rows;
+}
+
+export { PipelineError } from "./types.ts";
+export type { PipelineOptions, RunAgentFn, SearchWebFn } from "./pipeline.ts";

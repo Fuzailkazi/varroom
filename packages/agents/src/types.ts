@@ -43,9 +43,17 @@ export type Verdict = FactCheckerOutput["verdicts"][number];
 
 // ----- pipeline result returned to callers -----
 
+// the names the moderator pulled out of a claim. empty strings for untestable ones
+export type ClaimEntities = {
+  player: string;
+  positionA: string;
+  positionB?: string;
+};
+
 export type ClaimResult = {
   order: number;
   claimText: string;
+  entities: ClaimEntities;
   type: "POSITIONAL_ROLE" | "UNTESTABLE";
   verdict: "VERIFIED" | "PARTIALLY_TRUE" | "REFUTED" | "INSUFFICIENT_DATA" | "UNTESTABLE";
   reasoning: string | null;

@@ -8,14 +8,21 @@ import { createSendEmail } from "./auth/email.ts";
 import { requireSession, requireVerified } from "./auth/guards.ts";
 import { createCommentsRouter, createDebateCommentsRouter } from "./comments/routes.ts";
 import { createDebatesRouter, listTagsHandler } from "./debates/routes.ts";
+import { createReviewsRouter, createStartReviewRouter } from "./reviews/routes.ts";
+import { createReviewRunner } from "./reviews/runner.ts";
+import type { ReviewRunnerOptions } from "./reviews/runner.ts";
 import type { Env } from "./env.ts";
 import { errorHandler, sendError } from "./errors.ts";
 import { getTrustedOrigins, requireTrustedOrigin } from "./security/origin.ts";
 
 // Builds the Express app without starting it, so tests can run it on a
 // random port. server.ts is the only file that calls listen().
-export function createApp(env: Env) {
+// reviewRunnerOptions lets tests swap in fake agents and a short timeout
+export function createApp(env: Env, reviewRunnerOptions: ReviewRunnerOptions = {}) {
   const app = express();
+
+  // runs var reviews in the background and feeds the live streams
+  const reviewRunner = createReviewRunner(reviewRunnerOptions);
 
   // In production Railway's proxy sits in front of us. This tells Express
   // to trust one proxy, so req.ip is the fan's IP and not the proxy's.
@@ -42,6 +49,8 @@ export function createApp(env: Env) {
 
   // debates + tags
   app.use("/api/debates/:id/comments", createDebateCommentsRouter());
+  app.use("/api/debates/:id/reviews", createStartReviewRouter(reviewRunner));
+  app.use("/api/reviews", createReviewsRouter(reviewRunner));
   app.use("/api/debates", createDebatesRouter());
   app.use("/api/comments", createCommentsRouter());
   app.get("/api/tags", listTagsHandler);

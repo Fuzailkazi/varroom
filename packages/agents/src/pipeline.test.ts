@@ -1,5 +1,6 @@
 import { expect, test, describe } from "bun:test";
 import { runPipeline } from "./pipeline.ts";
+import { PipelineError } from "./types.ts";
 import type { RunAgentFn, SearchWebFn, EvidenceEntry } from "./pipeline.ts";
 import type { LlmAgent } from "@google/adk";
 import type { WebSource } from "./search.ts";
@@ -182,7 +183,7 @@ describe("runPipeline — happy path", () => {
   });
 });
 
-describe("runPipeline — AC-3 / AC-4: citation validation", () => {
+describe("runPipeline — citation validation", () => {
   test("citing a label from a different claim downgrades to INSUFFICIENT_DATA", async () => {
     const moderator = {
       claims: [
@@ -292,8 +293,8 @@ describe("runPipeline — AC-3 / AC-4: citation validation", () => {
   });
 });
 
-describe("runPipeline — AC-5: search failure", () => {
-  test("failed search writes an error evidence row and sets claim to INSUFFICIENT_DATA", async () => {
+describe("runPipeline — search failure", () => {
+  test("when every search fails, the whole run fails at the search step so it can be retried", async () => {
     const moderator = {
       claims: [
         {
@@ -305,18 +306,61 @@ describe("runPipeline — AC-5: search failure", () => {
       ],
     };
 
-    const result = await runPipeline("Bellingham as a 9", {
-      runAgentFn: makeRunAgentFn(moderator, { verdicts: [] }),
-      searchWebFn: makeFailingSearchFn("Search API unreachable"),
+    let thrown: unknown = null;
+    try {
+      await runPipeline("Bellingham as a 9", {
+        runAgentFn: makeRunAgentFn(moderator, { verdicts: [] }),
+        searchWebFn: makeFailingSearchFn("Search API unreachable"),
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(PipelineError);
+    const pipelineError = thrown as PipelineError;
+    expect(pipelineError.step).toBe("search");
+    expect(pipelineError.message).toContain("Search API unreachable");
+  });
+
+  test("when only some searches fail, the run goes on and just that claim can't be checked", async () => {
+    const moderator = {
+      claims: [
+        {
+          order: 1,
+          claimText: "Player A is better as a 9 than an 8",
+          type: "POSITIONAL_ROLE",
+          entities: { player: "Player A", positionA: "9", positionB: "8" },
+        },
+        {
+          order: 2,
+          claimText: "Player B is better as a 10 than a winger",
+          type: "POSITIONAL_ROLE",
+          entities: { player: "Player B", positionA: "10", positionB: "winger" },
+        },
+      ],
+    };
+    const factChecker = {
+      verdicts: [{ claimOrder: 2, verdict: "VERIFIED", reasoning: "Found it.", citedLabels: ["E2"] }],
+    };
+
+    // first search throws, second one works
+    let calls = 0;
+    const flakySearch: SearchWebFn = async () => {
+      calls++;
+      if (calls === 1) {
+        throw new Error("Search API unreachable");
+      }
+      return [{ url: "https://site.com/b", title: "site.com", publishedAt: null }];
+    };
+
+    const result = await runPipeline("two claims", {
+      runAgentFn: makeRunAgentFn(moderator, factChecker),
+      searchWebFn: flakySearch,
     });
 
-    // One error evidence row must exist.
-    expect(result.evidence).toHaveLength(1);
     expect(result.evidence.at(0)?.error).toBe("Search API unreachable");
-    expect(result.evidence.at(0)?.result).toEqual({});
-
-    // The claim must be INSUFFICIENT_DATA without reaching the Fact Checker.
     expect(result.claims.at(0)?.verdict).toBe("INSUFFICIENT_DATA");
+    expect(result.claims.at(1)?.verdict).toBe("VERIFIED");
   });
 
   test("empty search results also produce an error evidence row", async () => {
@@ -342,7 +386,7 @@ describe("runPipeline — AC-5: search failure", () => {
   });
 });
 
-describe("runPipeline — AC-6: UNTESTABLE claims", () => {
+describe("runPipeline — UNTESTABLE claims", () => {
   test("UNTESTABLE claims are excluded from the score and never searched", async () => {
     let searchCallCount = 0;
     const countingSearch: SearchWebFn = async () => {
@@ -396,7 +440,7 @@ describe("runPipeline — AC-6: UNTESTABLE claims", () => {
   });
 });
 
-describe("runPipeline — AC-7: score edge cases", () => {
+describe("runPipeline — score edge cases", () => {
   test("zero testable claims gives null score and INCONCLUSIVE", async () => {
     const moderator = {
       claims: [
@@ -461,5 +505,59 @@ describe("runPipeline — AC-7: score edge cases", () => {
 
     expect(result.score).toBe(50);
     expect(result.decision).toBe("CONFIRMED");
+  });
+});
+
+describe("runPipeline — progress callback and entities", () => {
+  test("calls onClaimsExtracted with the moderator's claims before searching", async () => {
+    const moderator = {
+      claims: [
+        {
+          order: 1,
+          claimText: "Bellingham is better as a false 9 than as an 8",
+          type: "POSITIONAL_ROLE",
+          entities: { player: "Bellingham", positionA: "false 9", positionB: "8" },
+        },
+      ],
+    };
+
+    const steps: string[] = [];
+    let claimsSeen = 0;
+    const recordingSearch: SearchWebFn = async () => {
+      steps.push("search");
+      return [{ url: "https://site.com/a", title: "site.com", publishedAt: null }];
+    };
+
+    await runPipeline("text", {
+      runAgentFn: makeRunAgentFn(moderator, { verdicts: [] }),
+      searchWebFn: recordingSearch,
+      onClaimsExtracted: async (claims) => {
+        steps.push("claims");
+        claimsSeen = claims.length;
+      },
+    });
+
+    expect(steps).toEqual(["claims", "search"]);
+    expect(claimsSeen).toBe(1);
+  });
+
+  test("keeps the moderator's player and positions on each claim result", async () => {
+    const moderator = {
+      claims: [
+        {
+          order: 1,
+          claimText: "Bellingham is better as a false 9 than as an 8",
+          type: "POSITIONAL_ROLE",
+          entities: { player: "Bellingham", positionA: "false 9", positionB: "8" },
+        },
+      ],
+    };
+
+    const result = await runPipeline("text", {
+      runAgentFn: makeRunAgentFn(moderator, { verdicts: [] }),
+      searchWebFn: makeSearchFn([{ url: "https://site.com/a", title: "site.com", publishedAt: null }]),
+    });
+
+    expect(result.claims.at(0)?.entities).toEqual({ player: "Bellingham", positionA: "false 9", positionB: "8" });
   });
 });
