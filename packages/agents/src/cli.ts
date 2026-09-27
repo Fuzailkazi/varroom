@@ -5,6 +5,7 @@
 import { createDebate } from "@varroom/db";
 import { reviewDebate } from "./index.ts";
 import { PipelineError } from "./types.ts";
+import { formatReview } from "./format.ts";
 
 async function main() {
   const text = process.argv[2];
@@ -49,44 +50,7 @@ async function main() {
 
   try {
     const result = await reviewDebate(debateId, text);
-
-    console.log("=== Claims ===");
-    for (const claim of result.claims) {
-      console.log(`\nClaim ${claim.order} [${claim.type}]: "${claim.claimText}"`);
-      console.log(`  Verdict: ${claim.verdict}`);
-      if (claim.reasoning) {
-        console.log(`  Reasoning: ${claim.reasoning}`);
-      }
-      if (claim.citedLabels.length > 0) {
-        console.log(`  Cited: ${claim.citedLabels.join(", ")}`);
-      }
-      if (claim.confidence !== null) {
-        console.log(`  Confidence: ${claim.confidence}`);
-      }
-    }
-
-    console.log("\n=== Evidence ledger ===");
-    if (result.evidence.length === 0) {
-      console.log("(no searches were run)");
-    }
-    for (const entry of result.evidence) {
-      if (entry.error) {
-        console.log(`${entry.label} (claim ${entry.args.claimOrder}) FAILED: ${entry.error}`);
-      } else {
-        console.log(`${entry.label} (claim ${entry.args.claimOrder}) ${entry.sourceTitle}`);
-        console.log(`   ${entry.sourceUrl}`);
-      }
-    }
-
-    console.log("\n=== Result ===");
-    if (result.score === null) {
-      console.log("No claim could be scored: INCONCLUSIVE");
-    } else {
-      console.log(`Score: ${result.score}/100`);
-      console.log(`Decision: ${result.decision}`);
-    }
-
-    console.log(`\nReview id: ${result.reviewId}`);
+    console.log(formatReview(result));
   } catch (err) {
     if (err instanceof PipelineError) {
       console.error(`\nPipeline failed at step "${err.step}": ${err.message}`);
