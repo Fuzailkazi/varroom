@@ -13,7 +13,9 @@ export const ErrorResponse = z.object({
     message: z.string(), // human-readable message
     fields: z.array(FieldError).optional(), // only on VALIDATION_FAILED
     existingId: z.uuid().optional(), // only on DUPLICATE_DEBATE
-    retryAt: z.iso.datetime().optional(), // only on REVIEW_LIMIT_REACHED: when a slot frees up
+    // only on REVIEW_LIMIT_REACHED (when a slot frees up) and
+    // DAILY_BUDGET_REACHED (when the daily budget resets, next midnight pacific)
+    retryAt: z.iso.datetime().optional(),
   }),
 });
 

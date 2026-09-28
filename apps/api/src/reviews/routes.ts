@@ -2,19 +2,22 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import {
-  createReview,
   debateExists,
   findLiveReview,
-  getReviewCapUsage,
+  getBudgetStatus,
   getReviewDetail,
   getReviewState,
   listReviewEventsAfter,
+  startReviewLocked,
 } from "@varroom/db";
-import type { ReviewSummaryRow } from "@varroom/db";
+import type { ReviewSummaryRow, StartReviewResult } from "@varroom/db";
 import { geminiModel } from "@varroom/agents";
-import { REVIEW_DAILY_LIMIT, REVIEW_LIMIT_WINDOW_MS, REVIEW_TIMEOUT_MS, StartReviewResponse } from "@varroom/shared";
+import { AvailabilityResponse, REVIEW_TIMEOUT_MS, StartReviewResponse, dailyBudgetMessage } from "@varroom/shared";
+import type { UsageLimits } from "@varroom/shared";
 import { requireVerified } from "../auth/guards.ts";
 import { sendError } from "../errors.ts";
+import { createPerMinuteLimiter } from "../security/rateLimit.ts";
+import type { RateLimits } from "../security/rateLimit.ts";
 import { failedEvent, finalEventFromState, publicFailure, toReviewResponse } from "./response.ts";
 import type { StreamMessage } from "./response.ts";
 import type { ReviewRunner } from "./runner.ts";
@@ -25,20 +28,30 @@ const Uuid = z.uuid();
 const HEARTBEAT_MS = 15 * 1000; // keeps proxies from closing a quiet stream
 const MAX_STREAM_MS = REVIEW_TIMEOUT_MS + 60 * 1000; // no stream outlives its review by much
 
-// post /api/debates/:id/reviews
-export function createStartReviewRouter(runner: ReviewRunner) {
+// post /api/debates/:id/reviews. limits: the fan cap and the daily gemini budget
+export function createStartReviewRouter(runner: ReviewRunner, limits: UsageLimits) {
   const router = Router({ mergeParams: true });
   router.post("/", requireVerified, async (req: Request, res: Response) => {
-    await startReviewHandler(req, res, runner);
+    await startReviewHandler(req, res, runner, limits);
   });
   return router;
 }
 
-// get /api/reviews/:id and /api/reviews/:id/events. both public
-export function createReviewsRouter(runner: ReviewRunner) {
+// get /api/reviews/availability, /api/reviews/:id and /api/reviews/:id/events. all public,
+// so each is rate limited per ip. the limiter runs first, before any db read or stream
+export function createReviewsRouter(runner: ReviewRunner, limits: UsageLimits, rateLimits: RateLimits) {
   const router = Router();
-  router.get("/:id", getReviewHandler);
-  router.get("/:id/events", async (req: Request, res: Response) => {
+
+  // one limiter object on both routes means one shared counter per ip
+  const readLimiter = createPerMinuteLimiter(rateLimits.reviewReadsPerMinute);
+  const streamLimiter = createPerMinuteLimiter(rateLimits.reviewStreamsPerMinute);
+
+  // must come before /:id, or "availability" would be read as a review id
+  router.get("/availability", readLimiter, async (req: Request, res: Response) => {
+    await availabilityHandler(req, res, limits);
+  });
+  router.get("/:id", readLimiter, getReviewHandler);
+  router.get("/:id/events", streamLimiter, async (req: Request, res: Response) => {
     await streamReviewHandler(req, res, runner);
   });
   return router;
@@ -60,9 +73,19 @@ function sendReview(res: Response, status: number, review: ReviewSummaryRow) {
 
 // post /api/debates/:id/reviews
 
-async function startReviewHandler(req: Request, res: Response, runner: ReviewRunner) {
+// seconds from now until `at`, rounded up and at least 1, for the Retry-After header
+function secondsUntil(at: Date): number {
+  const seconds = Math.ceil((at.getTime() - Date.now()) / 1000);
+  if (seconds < 1) {
+    return 1;
+  }
+  return seconds;
+}
+
+async function startReviewHandler(req: Request, res: Response, runner: ReviewRunner, limits: UsageLimits) {
   // requireVerified already ran, so signedIn is set and email is confirmed
   const userId = req.signedIn!.user.id;
+  const isAdmin = req.signedIn!.user.role === "ADMIN";
   const debateId = String(req.params.id);
 
   // 1. the debate must exist
@@ -77,40 +100,91 @@ async function startReviewHandler(req: Request, res: Response, runner: ReviewRun
   }
 
   // 2. one verdict per debate: a running or finished review is returned as is,
-  // and it doesn't cost the fan a slot
+  // even when the budget is out, and it doesn't cost the fan a slot
   const live = await findLiveReview(debateId);
   if (live) {
     sendReview(res, 200, live);
     return;
   }
 
-  // 3. daily cap so one fan can't burn the ai budget. failed reviews don't count
-  const windowStart = new Date(Date.now() - REVIEW_LIMIT_WINDOW_MS);
-  const usage = await getReviewCapUsage(userId, windowStart);
-  if (usage.count >= REVIEW_DAILY_LIMIT && usage.oldestCreatedAt) {
-    // a slot frees up when the oldest counted review turns 24h old
-    const retryAt = new Date(usage.oldestCreatedAt.getTime() + REVIEW_LIMIT_WINDOW_MS);
-    let retryAfterSeconds = Math.ceil((retryAt.getTime() - Date.now()) / 1000);
-    if (retryAfterSeconds < 1) {
-      retryAfterSeconds = 1;
-    }
-    res.set("Retry-After", String(retryAfterSeconds));
-    sendError(res, 429, "REVIEW_LIMIT_REACHED", `You can start ${REVIEW_DAILY_LIMIT} reviews a day. Try again later.`, {
-      retryAt: retryAt.toISOString(),
+  // 3. fan cap, budget and insert, in one locked transaction.
+  // admins skip only the fan cap: the budget protects everyone, so nobody skips it
+  let fanDailyLimit: number | null = limits.reviewDailyLimit;
+  if (isAdmin) {
+    fanDailyLimit = null;
+  }
+
+  let started: StartReviewResult;
+  try {
+    started = await startReviewLocked({
+      debateId: debateId,
+      model: geminiModel(),
+      requestedById: userId,
+      fanDailyLimit: fanDailyLimit,
+      aiDailyCallLimit: limits.aiDailyCallLimit,
+    });
+  } catch (err) {
+    // we can't tell whether there's room, so start nothing (fail closed)
+    console.error("review start: the cap or budget check failed:", err);
+    sendError(res, 503, "SERVICE_UNAVAILABLE", "Reviews are unavailable right now. Try again in a moment.");
+    return;
+  }
+
+  // someone else created one a moment ago, the db hands us theirs
+  if (started.outcome === "exists") {
+    sendReview(res, 200, started.review);
+    return;
+  }
+
+  // this fan used up their daily reviews. a slot frees up when the oldest counted one turns 24h old
+  if (started.outcome === "fan_cap") {
+    res.set("Retry-After", String(secondsUntil(started.retryAt)));
+    sendError(
+      res,
+      429,
+      "REVIEW_LIMIT_REACHED",
+      `You can start ${limits.reviewDailyLimit} reviews a day. Try again later.`,
+      { retryAt: started.retryAt.toISOString() },
+    );
+    return;
+  }
+
+  // today's gemini budget can't fit one more review. it opens again at midnight pacific
+  if (started.outcome === "budget") {
+    const budget = started.budget;
+    console.warn(
+      `review start refused by the daily budget: used ${budget.used}, reserved ${budget.reserved}, limit ${budget.limit}`,
+    );
+    res.set("Retry-After", String(secondsUntil(started.resetsAt)));
+    sendError(res, 503, "DAILY_BUDGET_REACHED", dailyBudgetMessage(started.resetsAt), {
+      retryAt: started.resetsAt.toISOString(),
     });
     return;
   }
 
-  // 4. create it. if someone else created one a moment ago, the db hands us theirs
-  const created = await createReview({ debateId: debateId, model: geminiModel(), requestedById: userId });
-  if (created.outcome === "exists") {
-    sendReview(res, 200, created.review);
+  // 4. created: run it in the background and answer straight away
+  runner.start(started.review.id, debateId);
+  sendReview(res, 202, started.review);
+}
+
+// get /api/reviews/availability
+
+// can a new review start right now? only a yes/no and the reset time, never the counts
+async function availabilityHandler(_req: Request, res: Response, limits: UsageLimits) {
+  let open: boolean;
+  let resetsAt: Date;
+  try {
+    const budget = await getBudgetStatus(limits.aiDailyCallLimit);
+    open = budget.open;
+    resetsAt = budget.resetsAt;
+  } catch (err) {
+    console.error("review availability: the budget check failed:", err);
+    sendError(res, 503, "SERVICE_UNAVAILABLE", "Reviews are unavailable right now. Try again in a moment.");
     return;
   }
 
-  // 5. run it in the background and answer straight away
-  runner.start(created.review.id, debateId);
-  sendReview(res, 202, created.review);
+  const body = AvailabilityResponse.parse({ open: open, resetsAt: resetsAt.toISOString() });
+  res.json(body);
 }
 
 // get /api/reviews/:id

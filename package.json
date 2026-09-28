@@ -20,7 +20,8 @@
     "db:generate": "bun run --filter @varroom/db db:generate",
     "db:migrate": "bun run --filter @varroom/db db:migrate",
     "db:studio": "bun run --filter @varroom/db db:studio",
-    "db:seed": "bun run --filter @varroom/db db:seed"
+    "db:seed": "bun run --filter @varroom/db db:seed",
+    "trace": "bun --env-file=.env packages/agents/src/trace.ts"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

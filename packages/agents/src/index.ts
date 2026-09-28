@@ -1,7 +1,7 @@
-import { finishReviewComplete, finishReviewFailed, startReview } from "@varroom/db";
+import { finishReviewComplete, finishReviewFailed, recordAiCall, startReview } from "@varroom/db";
 import type { FinishedClaim, FinishedEvidence } from "@varroom/db";
-import { DEFAULT_GEMINI_MODEL, PipelineError } from "./types.ts";
-import type { ClaimResult } from "./types.ts";
+import { PipelineError, ReviewStoppedError } from "./types.ts";
+import type { AiCallRecord, ClaimResult } from "./types.ts";
 import { runPipeline } from "./pipeline.ts";
 import type { EvidenceEntry, PipelineOptions, PipelineOutput } from "./pipeline.ts";
 import { buildSummary } from "./summary.ts";
@@ -21,13 +21,7 @@ export type ReviewRunResult = {
 };
 
 // the gemini model reviews run on, also stored on the review row
-export function geminiModel(): string {
-  const fromEnv = process.env.GEMINI_MODEL;
-  if (fromEnv) {
-    return fromEnv;
-  }
-  return DEFAULT_GEMINI_MODEL;
-}
+export { geminiModel } from "./types.ts";
 
 // turns any error into the "<kind>: <detail>" text saved in failure_reason
 export function failureReasonFor(err: unknown): string {
@@ -50,12 +44,43 @@ export async function runReview(reviewId: string, text: string, options: Pipelin
     return null;
   }
 
-  // 1. run the agents
+  // 1. run the agents, saving every gemini attempt as it ends
+  // the review id also becomes the ADK session id, so tracing groups this review's spans.
+  // reviewEnded turns true once a saved call shows the review already ended (timed out,
+  // or deleted with its debate). from then on the pipeline starts no new gemini attempt
+  let reviewEnded = false;
+  const pipelineOptions: PipelineOptions = {
+    ...options,
+    reviewId: reviewId,
+    onAiCall: async (record) => {
+      const stillLive = await saveAiCall(reviewId, record);
+      if (!stillLive) {
+        reviewEnded = true;
+      }
+      if (options.onAiCall) {
+        await options.onAiCall(record);
+      }
+    },
+    shouldStop: () => {
+      if (reviewEnded) {
+        return true;
+      }
+      // the caller may know first, e.g. the api runner's timeout
+      if (options.shouldStop) {
+        return options.shouldStop();
+      }
+      return false;
+    },
+  };
+
   let output: PipelineOutput;
   try {
-    output = await runPipeline(text, options);
+    output = await runPipeline(text, pipelineOptions);
   } catch (err) {
-    await markFailed(reviewId, failureReasonFor(err));
+    // a stopped review was already ended by whatever stopped it, so keep its reason
+    if (!(err instanceof ReviewStoppedError)) {
+      await markFailed(reviewId, failureReasonFor(err));
+    }
     throw err;
   }
 
@@ -67,8 +92,6 @@ export async function runReview(reviewId: string, text: string, options: Pipelin
       score: output.score,
       decision: output.decision,
       summary: summary,
-      inputTokens: 0, // token counting comes later, with usage tracking
-      outputTokens: 0,
       evidence: toFinishedEvidence(output.evidence),
       claims: toFinishedClaims(output.claims),
     });
@@ -90,6 +113,18 @@ export async function runReview(reviewId: string, text: string, options: Pipelin
 }
 
 // helpers
+
+// saves one gemini attempt and returns whether the review is still live.
+// a failed save is only logged: losing a trace row must never fail the review
+// itself, so the review carries on (true) when we can't tell
+async function saveAiCall(reviewId: string, record: AiCallRecord): Promise<boolean> {
+  try {
+    return await recordAiCall(reviewId, record);
+  } catch (err) {
+    console.error(`review ${reviewId}: could not record a ${record.step} call:`, err);
+    return true;
+  }
+}
 
 // marks the review FAILED but never lets that write hide the original error
 async function markFailed(reviewId: string, reason: string): Promise<void> {
@@ -141,5 +176,7 @@ function toFinishedClaims(claims: ClaimResult[]): FinishedClaim[] {
   return rows;
 }
 
-export { PipelineError } from "./types.ts";
-export type { PipelineOptions, RunAgentFn, SearchWebFn } from "./pipeline.ts";
+export { PipelineError, ReviewStoppedError } from "./types.ts";
+export { setupTracing } from "./telemetry.ts";
+export type { AiCallFn, PipelineOptions, RunAgentFn, SearchWebFn } from "./pipeline.ts";
+export type { AgentReply, AiCallRecord, SearchReply, TokenUsage, WebSource } from "./types.ts";

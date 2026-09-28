@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { readUsageLimits } from "@varroom/shared";
+import type { UsageLimits } from "@varroom/shared";
 
 // app environment variables - validated at startup
 const EnvSchema = z.object({
@@ -21,7 +23,9 @@ const EnvSchema = z.object({
   EMAIL_FROM: z.string().optional(),
 });
 
-export type Env = z.infer<typeof EnvSchema>;
+// the checked env vars, plus the two usage limits (aiDailyCallLimit and reviewDailyLimit)
+// read from AI_DAILY_CALL_LIMIT and REVIEW_DAILY_LIMIT
+export type Env = z.infer<typeof EnvSchema> & UsageLimits;
 
 // Reads process.env and returns the checked values.
 // If something is wrong, it prints what is wrong and stops the server.
@@ -32,7 +36,17 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     process.exit(1);
   }
 
-  const env = result.data;
+  // the limits have their own parser, shared with the review cli
+  let limits: UsageLimits;
+  try {
+    limits = readUsageLimits(source);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Invalid environment:\n${message}`);
+    process.exit(1);
+  }
+
+  const env: Env = { ...result.data, ...limits };
 
   // In production emails must really be sent, so the server
   // refuses to start without the email settings. Development prints

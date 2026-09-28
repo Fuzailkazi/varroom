@@ -13,6 +13,14 @@ export type ReviewRunnerOptions = {
   runAgentFn?: RunAgentFn; // tests swap in fake agents
   searchWebFn?: SearchWebFn; // tests swap in a fake search
   timeoutMs?: number; // tests use a short timeout
+  retryDelayMs?: number; // tests skip the wait between gemini retries
+};
+
+// what one background run keeps track of
+type RunState = {
+  reviewId: string;
+  startedAt: number;
+  finalSent: boolean; // the final event goes out once per run
 };
 
 export type ReviewRunner = {
@@ -44,42 +52,57 @@ export function createReviewRunner(options: ReviewRunnerOptions = {}): ReviewRun
   }
 
   function start(reviewId: string, debateId: string) {
-    runInBackground(reviewId, debateId).catch((err) => {
+    const run: RunState = { reviewId: reviewId, startedAt: Date.now(), finalSent: false };
+    runInBackground(run, debateId).catch(async (err) => {
       console.error(`review ${reviewId}: runner crashed`, err);
+      await failAfterCrash(run);
     });
   }
 
-  async function runInBackground(reviewId: string, debateId: string) {
-    const startedAt = Date.now();
-    let finalSent = false;
-
-    // every path ends by sending one final event, built from what's saved in the db
-    async function sendFinal() {
-      if (finalSent) {
-        return;
-      }
-      finalSent = true;
-
-      const state = await getReviewState(reviewId);
-      if (!state) {
-        // the debate (and with it the review) was deleted mid run
-        publish(reviewId, failedEvent(reviewId, publicFailure(null)));
-        console.log(`review ${reviewId}: deleted while running`);
-        return;
-      }
-      const message = finalEventFromState(state);
-      if (message) {
-        publish(reviewId, message);
-      }
-      const seconds = Math.round((Date.now() - startedAt) / 1000);
-      console.log(`review ${reviewId}: ${state.status} after ${seconds}s (${state.failureReason ?? state.decision})`);
+  // every path ends by sending one final event, built from what's saved in the db
+  async function sendFinal(run: RunState) {
+    if (run.finalSent) {
+      return;
     }
+    run.finalSent = true;
+    const reviewId = run.reviewId;
+
+    const state = await getReviewState(reviewId);
+    if (!state) {
+      // the debate (and with it the review) was deleted mid run
+      publish(reviewId, failedEvent(reviewId, publicFailure(null)));
+      console.log(`review ${reviewId}: deleted while running`);
+      return;
+    }
+    const message = finalEventFromState(state);
+    if (message) {
+      publish(reviewId, message);
+    }
+    const seconds = Math.round((Date.now() - run.startedAt) / 1000);
+    console.log(`review ${reviewId}: ${state.status} after ${seconds}s (${state.failureReason ?? state.decision})`);
+  }
+
+  // something outside the pipeline threw (e.g. loading the debate text).
+  // fail the review so it never sits QUEUED forever, and tell the open streams
+  async function failAfterCrash(run: RunState) {
+    try {
+      await finishReviewFailed(run.reviewId, "internal: runner crashed");
+      // the crash may have hit sendFinal itself before it published, so send it again
+      run.finalSent = false;
+      await sendFinal(run);
+    } catch (err) {
+      console.error(`review ${run.reviewId}: could not fail it after the crash`, err);
+    }
+  }
+
+  async function runInBackground(run: RunState, debateId: string) {
+    const reviewId = run.reviewId;
 
     // 1. the text to review. null = the debate is already gone
     const text = await getDebateText(debateId);
     if (text === null) {
       await finishReviewFailed(reviewId, "internal: debate was deleted before the review started");
-      await sendFinal();
+      await sendFinal(run);
       return;
     }
 
@@ -89,7 +112,7 @@ export function createReviewRunner(options: ReviewRunnerOptions = {}): ReviewRun
       timedOut = true;
       try {
         await finishReviewFailed(reviewId, `timeout: still running after ${Math.round(timeoutMs / 1000)}s`);
-        await sendFinal();
+        await sendFinal(run);
       } catch (err) {
         console.error(`review ${reviewId}: could not time it out`, err);
       }
@@ -101,6 +124,9 @@ export function createReviewRunner(options: ReviewRunnerOptions = {}): ReviewRun
       await runReview(reviewId, text, {
         runAgentFn: options.runAgentFn,
         searchWebFn: options.searchWebFn,
+        retryDelayMs: options.retryDelayMs,
+        // once timed out, the review holds no daily budget, so no new gemini attempt may start
+        shouldStop: () => timedOut,
         onClaimsExtracted: async (claims) => {
           if (timedOut) {
             return;
@@ -117,7 +143,7 @@ export function createReviewRunner(options: ReviewRunnerOptions = {}): ReviewRun
       clearTimeout(timer);
     }
 
-    await sendFinal();
+    await sendFinal(run);
   }
 
   return { start: start, subscribe: subscribe };

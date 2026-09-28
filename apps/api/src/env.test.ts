@@ -13,6 +13,18 @@ test("parses a valid environment and defaults PORT and NODE_ENV", () => {
   expect(env.NODE_ENV).toBe("development");
 });
 
+test("the usage limits default to 100 gemini calls a day and 3 reviews per fan", () => {
+  const env = loadEnv(valid);
+  expect(env.aiDailyCallLimit).toBe(100);
+  expect(env.reviewDailyLimit).toBe(3);
+});
+
+test("the usage limits come from AI_DAILY_CALL_LIMIT and REVIEW_DAILY_LIMIT", () => {
+  const env = loadEnv({ ...valid, AI_DAILY_CALL_LIMIT: "40", REVIEW_DAILY_LIMIT: "5" });
+  expect(env.aiDailyCallLimit).toBe(40);
+  expect(env.reviewDailyLimit).toBe(5);
+});
+
 test("development boots without an email provider", () => {
   expect(loadEnv(valid).RESEND_API_KEY).toBeUndefined();
 });
@@ -40,6 +52,16 @@ describe("when the environment is invalid", () => {
   test("refuses a BETTER_AUTH_SECRET shorter than 32 characters", () => {
     expect(() => loadEnv({ ...valid, BETTER_AUTH_SECRET: "short" })).toThrow("exit");
     expect(message()).toContain("BETTER_AUTH_SECRET");
+  });
+
+  test("stops the process naming AI_DAILY_CALL_LIMIT when it isn't a positive whole number", () => {
+    expect(() => loadEnv({ ...valid, AI_DAILY_CALL_LIMIT: "-1" })).toThrow("exit");
+    expect(message()).toContain("AI_DAILY_CALL_LIMIT must be a positive whole number");
+  });
+
+  test("stops the process naming REVIEW_DAILY_LIMIT when it is zero", () => {
+    expect(() => loadEnv({ ...valid, REVIEW_DAILY_LIMIT: "0" })).toThrow("exit");
+    expect(message()).toContain("REVIEW_DAILY_LIMIT");
   });
 
   test("production refuses to boot without RESEND_API_KEY and EMAIL_FROM", () => {

@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import { toNodeHandler } from "better-auth/node";
 import { checkDatabase, getUserProfile } from "@varroom/db";
 import { HealthResponse, MeResponse } from "@varroom/shared";
+import { createAdminRouter } from "./admin/routes.ts";
 import { createAuth } from "./auth/auth.ts";
 import { createSendEmail } from "./auth/email.ts";
 import { requireSession, requireVerified } from "./auth/guards.ts";
@@ -14,11 +15,18 @@ import type { ReviewRunnerOptions } from "./reviews/runner.ts";
 import type { Env } from "./env.ts";
 import { errorHandler, sendError } from "./errors.ts";
 import { getTrustedOrigins, requireTrustedOrigin } from "./security/origin.ts";
+import { DEFAULT_RATE_LIMITS } from "./security/rateLimit.ts";
+import type { RateLimits } from "./security/rateLimit.ts";
 
 // Builds the Express app without starting it, so tests can run it on a
 // random port. server.ts is the only file that calls listen().
-// reviewRunnerOptions lets tests swap in fake agents and a short timeout
-export function createApp(env: Env, reviewRunnerOptions: ReviewRunnerOptions = {}) {
+// reviewRunnerOptions lets tests swap in fake agents and a short timeout.
+// rateLimits: per ip, per minute limits on the public review reads (tests raise them)
+export function createApp(
+  env: Env,
+  reviewRunnerOptions: ReviewRunnerOptions = {},
+  rateLimits: RateLimits = DEFAULT_RATE_LIMITS,
+) {
   const app = express();
 
   // runs var reviews in the background and feeds the live streams
@@ -49,11 +57,16 @@ export function createApp(env: Env, reviewRunnerOptions: ReviewRunnerOptions = {
 
   // debates + tags
   app.use("/api/debates/:id/comments", createDebateCommentsRouter());
-  app.use("/api/debates/:id/reviews", createStartReviewRouter(reviewRunner));
-  app.use("/api/reviews", createReviewsRouter(reviewRunner));
+  // the fan cap and the daily gemini budget, read from the env
+  const usageLimits = { aiDailyCallLimit: env.aiDailyCallLimit, reviewDailyLimit: env.reviewDailyLimit };
+  app.use("/api/debates/:id/reviews", createStartReviewRouter(reviewRunner, usageLimits));
+  app.use("/api/reviews", createReviewsRouter(reviewRunner, usageLimits, rateLimits));
   app.use("/api/debates", createDebatesRouter());
   app.use("/api/comments", createCommentsRouter());
   app.get("/api/tags", listTagsHandler);
+
+  // admins only: review traces (raw gemini errors included)
+  app.use("/api/admin", createAdminRouter());
 
   // A stand in for the real write routes (posting, voting) until
   // they exist. Only added while running tests.

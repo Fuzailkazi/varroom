@@ -16,6 +16,7 @@
     "@google/adk": "^2.1.0",
     "@google/genai": "^2.24.0",
     "@varroom/db": "workspace:*",
+    "@varroom/shared": "workspace:*",
     "zod": "catalog:"
   }
 }

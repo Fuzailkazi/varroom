@@ -21,87 +21,20 @@ export type ReviewSummaryRow = {
   createdAt: Date;
 };
 
-// helpers
+// starting a review (the locked start itself is in budget.ts)
 
-// postgres unique violation, e.g. a second live review for the same debate
-function isUniqueViolation(err: unknown): boolean {
-  if (typeof err !== "object" || err === null) {
-    return false;
-  }
-  const code = (err as { code?: unknown }).code;
-  return code === "P2002";
-}
-
-// starting a review
-
-export type NewReview = {
-  debateId: string;
-  model: string;
-  requestedById: string | null; // null for the cli
-};
-
-// outcome "created" = a new QUEUED review. "exists" = the debate already had a live
-// or finished review (maybe created a moment ago by someone else), returned instead
-export type CreateReviewResult = {
-  outcome: "created" | "exists";
-  review: ReviewSummaryRow;
-};
-
-// the one review of a debate that isn't FAILED, or null. the unique index allows at most one
-export async function findLiveReview(debateId: string): Promise<ReviewSummaryRow | null> {
-  const review = await prisma.review.findFirst({
+// the one review of a debate that isn't FAILED, or null. the unique index allows at most one.
+// db is the prisma client, or a transaction when the caller is inside one
+export async function findLiveReview(
+  debateId: string,
+  db: Prisma.TransactionClient = prisma,
+): Promise<ReviewSummaryRow | null> {
+  const review = await db.review.findFirst({
     where: { debateId: debateId, status: { not: "FAILED" } },
     orderBy: { createdAt: "desc" },
     select: { id: true, debateId: true, status: true, createdAt: true },
   });
   return review;
-}
-
-// creates a QUEUED review. if two requests race, the unique index rejects the second
-// insert and we hand back the winner instead
-export async function createReview(input: NewReview): Promise<CreateReviewResult> {
-  try {
-    const review = await prisma.review.create({
-      data: {
-        debateId: input.debateId,
-        status: "QUEUED",
-        model: input.model,
-        requestedById: input.requestedById,
-      },
-      select: { id: true, debateId: true, status: true, createdAt: true },
-    });
-    return { outcome: "created", review: review };
-  } catch (err) {
-    if (!isUniqueViolation(err)) {
-      throw err;
-    }
-    const existing = await findLiveReview(input.debateId);
-    if (!existing) {
-      // it failed between the insert and this read. rare, let the caller retry
-      throw err;
-    }
-    return { outcome: "exists", review: existing };
-  }
-}
-
-// daily cap: how many reviews this fan started since `since` (failed ones don't count),
-// and when the oldest of those started, so we can say when a slot frees up
-export async function getReviewCapUsage(userId: string, since: Date): Promise<{ count: number; oldestCreatedAt: Date | null }> {
-  const rows = await prisma.review.findMany({
-    where: {
-      requestedById: userId,
-      createdAt: { gt: since },
-      status: { not: "FAILED" },
-    },
-    orderBy: { createdAt: "asc" },
-    select: { createdAt: true },
-  });
-
-  let oldestCreatedAt: Date | null = null;
-  if (rows.length > 0) {
-    oldestCreatedAt = rows[0]!.createdAt;
-  }
-  return { count: rows.length, oldestCreatedAt: oldestCreatedAt };
 }
 
 // the text the agents review: title, a blank line, then the thesis. null if the debate is gone
@@ -198,8 +131,7 @@ export type FinishedReview = {
   score: number | null;
   decision: DecisionValue;
   summary: string;
-  inputTokens: number;
-  outputTokens: number;
+  // no token counts here: recordAiCall adds them up call by call
   evidence: FinishedEvidence[];
   claims: FinishedClaim[];
 };
@@ -217,8 +149,6 @@ export async function finishReviewComplete(reviewId: string, finished: FinishedR
         credibilityScore: finished.score,
         decision: finished.decision,
         summary: finished.summary,
-        inputTokens: finished.inputTokens,
-        outputTokens: finished.outputTokens,
         completedAt: new Date(),
       },
     });

@@ -1,11 +1,23 @@
 import { LlmAgent, InMemoryRunner, isFinalResponse, stringifyContent } from "@google/adk";
-import { ModeratorOutput, FactCheckerOutput, PipelineError, DEFAULT_GEMINI_MODEL } from "./types.ts";
-import type { Claim, ClaimResult, ReviewResult, EvidenceKind } from "./types.ts";
+import type { Event } from "@google/adk";
+import { MAX_SEARCHED_CLAIMS } from "@varroom/shared";
+import { ModeratorOutput, FactCheckerOutput, PipelineError, ReviewStoppedError, geminiModel } from "./types.ts";
+import type {
+  AgentReply,
+  AiCallRecord,
+  Claim,
+  ClaimResult,
+  EvidenceKind,
+  ReviewResult,
+  SearchReply,
+  TokenUsage,
+  WebSource,
+} from "./types.ts";
 import { validateCitations } from "./citations.ts";
 import type { EvidenceRecord } from "./citations.ts";
 import { computeScore, computeDecision } from "./score.ts";
 import { searchWeb as realSearchWeb } from "./search.ts";
-import type { WebSource } from "./search.ts";
+import { toTokenUsage } from "./usage.ts";
 
 // An evidence entry built by code during the search loop, never by the model.
 export type EvidenceEntry = {
@@ -20,11 +32,18 @@ export type EvidenceEntry = {
   error: string | null;
 };
 
-export type SearchWebFn = (query: string) => Promise<WebSource[]>;
+// One search attempt. Injectable so tests use a fake instead of Gemini.
+export type SearchWebFn = (query: string) => Promise<SearchReply>;
 
-// An agent runner function — injectable so unit tests can replace it with
-// a fake that returns fixed JSON without making real Gemini calls.
-export type RunAgentFn = (agent: LlmAgent, input: string) => Promise<string>;
+// One agent attempt (no retries, the pipeline does those) — injectable so
+// unit tests can replace it with a fake that returns fixed JSON without
+// making real Gemini calls. sessionId is the review id when there is one:
+// ADK puts it on its tracing spans, so one review's spans group together.
+// Fakes can leave it out.
+export type RunAgentFn = (agent: LlmAgent, input: string, sessionId?: string) => Promise<AgentReply>;
+
+// told about every gemini attempt once it ends. runReview saves each one as an ai_calls row
+export type AiCallFn = (record: AiCallRecord) => Promise<void>;
 
 export type PipelineOutput = {
   claims: ClaimResult[];
@@ -40,10 +59,27 @@ export type PipelineOptions = {
   searchWebFn?: SearchWebFn;
   runAgentFn?: RunAgentFn;
   onClaimsExtracted?: ClaimsExtractedFn;
+  onAiCall?: AiCallFn;
+  retryDelayMs?: number; // wait before the first retry, doubled after that. tests pass 0
+  reviewId?: string; // handed to runAgentFn as the ADK session id, for tracing
+  // asked before every new gemini attempt. true = the review has ended (timed out or
+  // deleted), so no new attempt starts and the pipeline throws ReviewStoppedError
+  shouldStop?: () => boolean;
 };
 
 // error text on the evidence row when a search worked but found nothing
 export const NO_SOURCES_ERROR = "No sources returned";
+
+// reasoning saved on a testable claim past the search limit
+export const NOT_CHECKED_REASONING = `Not checked: a review checks at most ${MAX_SEARCHED_CLAIMS} claims.`;
+
+// how many times each step may call gemini. these fixed numbers are what cap
+// a review at 16 calls, which the daily budget relies on
+const AGENT_MAX_ATTEMPTS = 3;
+const SEARCH_MAX_ATTEMPTS = 2;
+
+const DEFAULT_RETRY_DELAY_MS = 2000;
+const ATTEMPT_TIMEOUT_MS = 60_000;
 
 // Returns which website an evidence row came from, used to count
 // independent sources. Gemini grounding gives every source a Google
@@ -87,24 +123,55 @@ function buildSearchQuery(claim: Claim): string {
     : `${player} ${positionA} stats`;
 }
 
-// Runs the agent once and returns the model's final text.
+// Runs the agent once and returns the model's final text and token usage.
+// The session gets the id we were given (the review id), because ADK copies
+// the session id onto its tracing spans. With no id, ADK makes one up.
+// The runner is new for every attempt, so the id is never already taken,
+// and the in memory session goes away with the runner.
+async function defaultRunAgent(agent: LlmAgent, input: string, sessionId?: string): Promise<AgentReply> {
+  const runner = new InMemoryRunner({ agent, appName: "varroom" });
+  const session = await runner.sessionService.createSession({
+    appName: "varroom",
+    userId: "pipeline",
+    sessionId: sessionId,
+  });
+
+  const events = runner.runAsync({
+    userId: "pipeline",
+    sessionId: session.id,
+    newMessage: { parts: [{ text: input }] },
+  });
+  return readAgentEvents(events);
+}
+
+// Reads the events of one agent run until the final answer.
 // ADK does not throw when Gemini fails: it puts the error on the event
 // (errorCode / errorMessage) with no content, so we check for it ourselves.
-async function runAgentOnce(agent: LlmAgent, input: string): Promise<string> {
-  const runner = new InMemoryRunner({ agent, appName: "varroom" });
+// Usage comes from the last event that carries it. Gemini's usage on a
+// response is already that call's total, so we never add events together.
+// We read to the end of the run instead of stopping at the answer: ADK only
+// closes its model call tracing span once the run is over, and a span that
+// never closes is never sent to tracing.
+export async function readAgentEvents(events: AsyncIterable<Event>): Promise<AgentReply> {
+  let usage: TokenUsage | null = null;
+  let finalText: string | null = null;
 
-  for await (const event of runner.runEphemeral({
-    userId: "pipeline",
-    newMessage: { parts: [{ text: input }] },
-  })) {
+  for await (const event of events) {
+    if (event.usageMetadata) {
+      usage = toTokenUsage(event.usageMetadata);
+    }
     if (event.errorMessage) {
       throw new Error(`Gemini error ${event.errorCode ?? ""}: ${event.errorMessage}`);
     }
-    if (isFinalResponse(event)) {
-      return stringifyContent(event);
+    if (finalText === null && isFinalResponse(event)) {
+      finalText = stringifyContent(event);
     }
   }
-  throw new Error("The model finished without a final response");
+
+  if (finalText === null) {
+    throw new Error("The model finished without a final response");
+  }
+  return { text: finalText, usage: usage };
 }
 
 // Gemini sometimes answers "high demand, try again later" (503) or
@@ -114,27 +181,127 @@ function isTemporaryError(err: unknown): boolean {
   return /503|429|high demand|overloaded|try again/i.test(message);
 }
 
-// Runs a single LlmAgent call, retrying temporary errors up to 3 times.
-// Each attempt times out after 60 seconds.
-async function defaultRunAgent(agent: LlmAgent, input: string): Promise<string> {
-  const maxAttempts = 3;
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return String(err);
+}
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Runs one attempt, failing it if it takes longer than timeoutMs.
+// The timer is cleared afterwards so it never keeps the process alive.
+async function withTimeout<T>(attemptFn: () => Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`Gemini call timed out after ${Math.round(timeoutMs / 1000)}s`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([attemptFn(), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// everything runAttempts needs besides the step and the attempt itself
+export type AttemptContext = {
+  claimOrder: number | null; // searches only
+  model: string;
+  retryDelayMs: number;
+  timeoutMs: number;
+  onAiCall: AiCallFn | undefined;
+  shouldStop?: () => boolean; // see PipelineOptions
+};
+
+// Runs one gemini step: up to maxAttempts attempts, retrying only temporary
+// errors (wait retryDelayMs, then twice that). Every attempt is timed and
+// reported to onAiCall once it ends, success or failure, so no call can
+// slip past the trace or the daily budget. Throws the last error if no
+// attempt worked, or ReviewStoppedError if the review ended before an attempt.
+export async function runAttempts<T extends { usage: TokenUsage | null }>(
+  step: AiCallRecord["step"],
+  maxAttempts: number,
+  attemptFn: () => Promise<T>,
+  context: AttemptContext
+): Promise<T> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await Promise.race([
-        runAgentOnce(agent, input),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Agent call timed out after 60s")), 60_000)
-        ),
-      ]);
-    } catch (err) {
-      const canRetry = attempt < maxAttempts && isTemporaryError(err);
-      if (!canRetry) throw err;
-      // Wait 2s, then 4s, before trying again.
-      await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+    // the review ended (e.g. timed out): start nothing new. an attempt already
+    // running is still reported when it ends, but no retry follows it
+    if (context.shouldStop && context.shouldStop()) {
+      throw new ReviewStoppedError();
     }
+
+    const startedAt = new Date();
+    let reply: T | null = null;
+    let failure: unknown = null;
+
+    try {
+      reply = await withTimeout(attemptFn, context.timeoutMs);
+    } catch (err) {
+      failure = err;
+    }
+
+    // 1. report the attempt, whatever happened
+    if (context.onAiCall) {
+      let usage: TokenUsage | null = null;
+      let error: string | null = null;
+      if (reply !== null) {
+        usage = reply.usage;
+      } else {
+        error = errorMessage(failure);
+      }
+
+      await context.onAiCall({
+        step: step,
+        attempt: attempt,
+        claimOrder: context.claimOrder,
+        model: context.model,
+        status: reply !== null ? "OK" : "ERROR",
+        error: error,
+        usage: usage,
+        durationMs: Date.now() - startedAt.getTime(),
+        startedAt: startedAt,
+      });
+    }
+
+    // 2. it worked
+    if (reply !== null) {
+      return reply;
+    }
+
+    // 3. it failed: give up on the last attempt or on an error a retry won't fix
+    const canRetry = attempt < maxAttempts && isTemporaryError(failure);
+    if (!canRetry) {
+      throw failure;
+    }
+    await wait(context.retryDelayMs * attempt);
   }
   throw new Error("unreachable");
+}
+
+// Which testable claims get searched: the first few by order. A review
+// never searches more than MAX_SEARCHED_CLAIMS, so its calls stay capped.
+// Returns the orders of the testable claims left out.
+function claimsOverSearchLimit(claims: Claim[]): Set<number> {
+  const testable: Claim[] = [];
+  for (const claim of claims) {
+    if (claim.type === "POSITIONAL_ROLE") {
+      testable.push(claim);
+    }
+  }
+  testable.sort((a, b) => a.order - b.order);
+
+  const leftOut = new Set<number>();
+  for (let index = MAX_SEARCHED_CLAIMS; index < testable.length; index++) {
+    leftOut.add(testable[index]!.order);
+  }
+  return leftOut;
 }
 
 // Runs the Moderator → search loop → Fact Checker pipeline.
@@ -142,9 +309,27 @@ async function defaultRunAgent(agent: LlmAgent, input: string): Promise<string> 
 // searchWebFn and runAgentFn are injectable for unit testing.
 export async function runPipeline(
   text: string,
-  { searchWebFn = realSearchWeb, runAgentFn = defaultRunAgent, onClaimsExtracted }: PipelineOptions = {}
+  {
+    searchWebFn = realSearchWeb,
+    runAgentFn = defaultRunAgent,
+    onClaimsExtracted,
+    onAiCall,
+    retryDelayMs = DEFAULT_RETRY_DELAY_MS,
+    reviewId,
+    shouldStop,
+  }: PipelineOptions = {}
 ): Promise<PipelineOutput> {
-  const model = process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL;
+  const model = geminiModel();
+
+  // the settings every attempt shares. searches add their claim order
+  const agentContext: AttemptContext = {
+    claimOrder: null,
+    model: model,
+    retryDelayMs: retryDelayMs,
+    timeoutMs: ATTEMPT_TIMEOUT_MS,
+    onAiCall: onAiCall,
+    shouldStop: shouldStop,
+  };
 
   // moderator: split the text into claims
   const moderator = new LlmAgent({
@@ -164,10 +349,19 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
 
   let parsedClaims: Claim[];
   try {
-    const raw = await runAgentFn(moderator, text);
-    const parsed = ModeratorOutput.parse(JSON.parse(raw));
+    const reply = await runAttempts(
+      "MODERATOR",
+      AGENT_MAX_ATTEMPTS,
+      () => runAgentFn(moderator, text, reviewId),
+      agentContext
+    );
+    const parsed = ModeratorOutput.parse(JSON.parse(reply.text));
     parsedClaims = parsed.claims;
   } catch (err) {
+    // the review ended: pass that on as it is, it's not the moderator's fault
+    if (err instanceof ReviewStoppedError) {
+      throw err;
+    }
     throw new PipelineError(
       `Moderator failed: ${err instanceof Error ? err.message : String(err)}`,
       "moderator"
@@ -184,8 +378,12 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
   const evidenceEntries: EvidenceEntry[] = [];
   let labelCounter = 0;
 
+  // testable claims past the search limit are never searched
+  const notChecked = claimsOverSearchLimit(parsedClaims);
+
   for (const claim of parsedClaims) {
     if (claim.type !== "POSITIONAL_ROLE") continue;
+    if (notChecked.has(claim.order)) continue;
 
     const query = buildSearchQuery(claim);
     const args = { claimOrder: claim.order, query };
@@ -193,15 +391,16 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
     let sources: WebSource[] = [];
     let searchError: string | null = null;
 
+    const searchContext: AttemptContext = { ...agentContext, claimOrder: claim.order };
     try {
-      sources = await Promise.race([
-        searchWebFn(query),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Search timed out after 60s")), 60_000)
-        ),
-      ]);
+      const reply = await runAttempts("SEARCH", SEARCH_MAX_ATTEMPTS, () => searchWebFn(query), searchContext);
+      sources = reply.sources;
     } catch (err) {
-      searchError = err instanceof Error ? err.message : String(err);
+      // the review ended: stop the whole pipeline, don't save it as a failed search
+      if (err instanceof ReviewStoppedError) {
+        throw err;
+      }
+      searchError = errorMessage(err);
     }
 
     if (searchError !== null || sources.length === 0) {
@@ -276,10 +475,18 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
     const factCheckerInput = `Claims:\n${claimsContext}\n\nEvidence:\n${evidenceContext}`;
 
     try {
-      const raw = await runAgentFn(factChecker, factCheckerInput);
-      const parsed = FactCheckerOutput.parse(JSON.parse(raw));
+      const reply = await runAttempts(
+        "FACT_CHECKER",
+        AGENT_MAX_ATTEMPTS,
+        () => runAgentFn(factChecker, factCheckerInput, reviewId),
+        agentContext
+      );
+      const parsed = FactCheckerOutput.parse(JSON.parse(reply.text));
       verdicts = parsed.verdicts;
     } catch (err) {
+      if (err instanceof ReviewStoppedError) {
+        throw err;
+      }
       throw new PipelineError(
         `Fact Checker failed: ${err instanceof Error ? err.message : String(err)}`,
         "fact_checker"
@@ -306,6 +513,20 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
         type: "UNTESTABLE",
         verdict: "UNTESTABLE",
         reasoning: null,
+        citedLabels: [],
+        confidence: null,
+      };
+    }
+
+    // past the search limit: never searched, so no evidence and no verdict
+    if (notChecked.has(claim.order)) {
+      return {
+        order: claim.order,
+        claimText: claim.claimText,
+        entities: claim.entities,
+        type: "POSITIONAL_ROLE",
+        verdict: "INSUFFICIENT_DATA",
+        reasoning: NOT_CHECKED_REASONING,
         citedLabels: [],
         confidence: null,
       };

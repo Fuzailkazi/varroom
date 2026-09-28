@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 // searchWeb talks to Gemini, which is a network boundary, so the SDK is
 // replaced with a fake that returns whatever grounding chunks a test sets.
 let fakeChunks: unknown[] = [];
+let fakeUsage: unknown = undefined;
 let lastRequest: { model?: string; config?: unknown } = {};
 
 mock.module("@google/genai", () => ({
@@ -10,7 +11,10 @@ mock.module("@google/genai", () => ({
     models = {
       generateContent: async (request: { model: string; config: unknown }) => {
         lastRequest = request;
-        return { candidates: [{ groundingMetadata: { groundingChunks: fakeChunks } }] };
+        return {
+          candidates: [{ groundingMetadata: { groundingChunks: fakeChunks } }],
+          usageMetadata: fakeUsage,
+        };
       },
     };
   },
@@ -26,6 +30,7 @@ beforeEach(() => {
   process.env.GEMINI_API_KEY = "test-key";
   delete process.env.GEMINI_MODEL;
   fakeChunks = [];
+  fakeUsage = undefined;
 });
 
 afterEach(() => {
@@ -41,7 +46,7 @@ describe("searchWeb", () => {
       { web: { uri: "https://b.com/2", title: "b.com" } },
     ];
 
-    const sources = await searchWeb("Bellingham false 9 vs 8 stats");
+    const { sources } = await searchWeb("Bellingham false 9 vs 8 stats");
 
     expect(sources).toEqual([
       { url: "https://a.com/1", title: "a.com", publishedAt: null },
@@ -61,7 +66,7 @@ describe("searchWeb", () => {
       { web: { uri: "https://a.com/1", title: "a.com" } },
     ];
 
-    const sources = await searchWeb("query");
+    const { sources } = await searchWeb("query");
 
     expect(sources).toHaveLength(1);
   });
@@ -69,7 +74,7 @@ describe("searchWeb", () => {
   test("skips chunks that have no web url", async () => {
     fakeChunks = [{ web: { title: "no url" } }, {}, { web: { uri: "https://a.com", title: "a.com" } }];
 
-    const sources = await searchWeb("query");
+    const { sources } = await searchWeb("query");
 
     expect(sources.map((source) => source.url)).toEqual(["https://a.com"]);
   });
@@ -77,15 +82,34 @@ describe("searchWeb", () => {
   test("uses an empty title when the chunk has none", async () => {
     fakeChunks = [{ web: { uri: "https://a.com" } }];
 
-    const sources = await searchWeb("query");
+    const { sources } = await searchWeb("query");
 
     expect(sources.at(0)?.title).toBe("");
   });
 
   test("returns an empty list when the search found nothing", async () => {
-    const sources = await searchWeb("query");
+    const { sources } = await searchWeb("query");
 
     expect(sources).toEqual([]);
+  });
+
+  test("returns the tokens from the response's usage metadata, search prompt included", async () => {
+    fakeUsage = {
+      promptTokenCount: 12,
+      toolUsePromptTokenCount: 300,
+      candidatesTokenCount: 80,
+      thoughtsTokenCount: 40,
+    };
+
+    const { usage } = await searchWeb("query");
+
+    expect(usage).toEqual({ inputTokens: 312, outputTokens: 80, thinkingTokens: 40 });
+  });
+
+  test("usage is null when the response has no usage metadata", async () => {
+    const { usage } = await searchWeb("query");
+
+    expect(usage).toBeNull();
   });
 
   test("uses GEMINI_MODEL when set, and gemini-2.5-flash when not", async () => {

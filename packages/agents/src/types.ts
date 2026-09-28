@@ -83,10 +83,73 @@ export class PipelineError extends Error {
   }
 }
 
+// thrown instead of starting a new gemini attempt once the review has ended (it timed
+// out, or its debate was deleted). an ended review holds no daily budget any more,
+// so every call it kept making would be one the budget never planned for
+export class ReviewStoppedError extends Error {
+  constructor() {
+    super("The review already ended, so no more Gemini calls were started");
+    this.name = "ReviewStoppedError";
+  }
+}
+
 // ----- model -----
 // Used when GEMINI_MODEL is not set. Google retires old model names
 // (gemini-2.0-flash now returns 404), so keep this in one place.
 export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+
+// the gemini model reviews run on, also stored on the review row and on every ai call row
+export function geminiModel(): string {
+  const fromEnv = process.env.GEMINI_MODEL;
+  if (fromEnv) {
+    return fromEnv;
+  }
+  return DEFAULT_GEMINI_MODEL;
+}
+
+// ----- web search -----
+
+// one web page the grounded search cited
+export type WebSource = {
+  url: string;
+  title: string;
+  publishedAt: Date | null;
+};
+
+// ----- token usage and call records -----
+
+// tokens gemini reported for one call. missing counts are 0
+export type TokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  thinkingTokens: number;
+};
+
+// what one agent attempt gives back. usage is null when gemini reported none
+export type AgentReply = {
+  text: string;
+  usage: TokenUsage | null;
+};
+
+// what one search attempt gives back
+export type SearchReply = {
+  sources: WebSource[];
+  usage: TokenUsage | null;
+};
+
+// one gemini attempt, success or failure. the pipeline hands one of these
+// to onAiCall after every attempt, retries included
+export type AiCallRecord = {
+  step: "MODERATOR" | "SEARCH" | "FACT_CHECKER";
+  attempt: number; // 1 based
+  claimOrder: number | null; // searches only
+  model: string;
+  status: "OK" | "ERROR";
+  error: string | null;
+  usage: TokenUsage | null;
+  durationMs: number;
+  startedAt: Date;
+};
 
 // ----- evidence kind -----
 

@@ -27,24 +27,37 @@ export { setVote, type SetVoteResult } from "./votes.ts";
 export { findTagsBySlugs, listTags, sortTags, type TagRow } from "./tags.ts";
 export { getUserProfile, type UserProfile } from "./users.ts";
 export {
+  deleteOldAiCalls,
+  getReviewTrace,
+  recordAiCall,
+  type AiCallStatusValue,
+  type AiCallStepValue,
+  type NewAiCall,
+  type ReviewTrace,
+  type ReviewTraceCall,
+} from "./aiCalls.ts";
+export {
+  getBudgetStatus,
+  startReviewLocked,
+  type BudgetStatus,
+  type StartReviewInput,
+  type StartReviewResult,
+} from "./budget.ts";
+export {
   addReviewEvent,
-  createReview,
   failInterruptedReviews,
   findLiveReview,
   finishReviewComplete,
   finishReviewFailed,
   getDebateText,
-  getReviewCapUsage,
   getReviewDetail,
   getReviewState,
   listReviewEventsAfter,
   startReview,
-  type CreateReviewResult,
   type DecisionValue,
   type FinishedClaim,
   type FinishedEvidence,
   type FinishedReview,
-  type NewReview,
   type ReviewDetailClaim,
   type ReviewDetailEvidence,
   type ReviewDetailRow,

@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Server } from "node:http";
 import { prisma } from "@varroom/db/client";
-import type { RunAgentFn, SearchWebFn } from "@varroom/agents";
-import { ErrorResponse, ReviewResponse, StartReviewResponse } from "@varroom/shared";
+import { getBudgetStatus } from "@varroom/db";
+import type { AgentReply, RunAgentFn, SearchReply, SearchWebFn, TokenUsage, WebSource } from "@varroom/agents";
+import { AvailabilityResponse, ErrorResponse, ReviewResponse, StartReviewResponse } from "@varroom/shared";
 import { getLastEmail } from "../auth/email.ts";
 import { Fan, newFanDetails } from "../testing/fan.ts";
 import { startTestServer } from "../testing/server.ts";
-import { recoverInterruptedReviews } from "./runner.ts";
+import { createReviewRunner, recoverInterruptedReviews } from "./runner.ts";
+import type { StreamMessage } from "./response.ts";
 
 // integration tests for the review api: real endpoints and db (neon test branch),
 // fake agents and fake search so no gemini calls. skipped without DATABASE_URL_TEST
@@ -14,6 +16,16 @@ import { recoverInterruptedReviews } from "./runner.ts";
 const hasTestDatabase = Boolean(process.env.DATABASE_URL);
 
 // fake agents
+
+// builds what one fake agent attempt returns: the json as text, plus optional token usage
+function reply(json: object, usage: TokenUsage | null = null): AgentReply {
+  return { text: JSON.stringify(json), usage: usage };
+}
+
+// builds what one fake search attempt returns
+function found(sources: WebSource[], usage: TokenUsage | null = null): SearchReply {
+  return { sources: sources, usage: usage };
+}
 
 const moderatorOutput = {
   claims: [
@@ -75,13 +87,13 @@ const fakeAgents: RunAgentFn = async (_agent, input) => {
     if (control.factCheckerGate) {
       await control.factCheckerGate.promise;
     }
-    return JSON.stringify(factCheckerOutput);
+    return reply(factCheckerOutput);
   }
   control.moderatorInputs.push(input);
   if (control.moderatorGate) {
     await control.moderatorGate.promise;
   }
-  return JSON.stringify(control.moderatorAnswer);
+  return reply(control.moderatorAnswer);
 };
 
 const fakeSearch: SearchWebFn = async () => {
@@ -89,12 +101,12 @@ const fakeSearch: SearchWebFn = async () => {
     throw new Error("Gemini error 429: quota exceeded for model xyz");
   }
   if (control.searchFindsNothing) {
-    return [];
+    return found([]);
   }
-  return [
+  return found([
     { url: "https://whoscored.com/a", title: "whoscored.com", publishedAt: null },
     { url: "https://fotmob.com/b", title: "fotmob.com", publishedAt: null },
-  ];
+  ]);
 };
 
 let server: Server;
@@ -102,7 +114,8 @@ let baseUrl: string;
 
 beforeAll(async () => {
   if (!hasTestDatabase) return;
-  const started = await startTestServer({ runAgentFn: fakeAgents, searchWebFn: fakeSearch });
+  // no wait between retries, so the failing search (a 429) doesn't slow the tests down
+  const started = await startTestServer({ runAgentFn: fakeAgents, searchWebFn: fakeSearch, retryDelayMs: 0 });
   server = started.server;
   baseUrl = started.baseUrl;
 });
@@ -412,22 +425,25 @@ describe.skipIf(!hasTestDatabase)("POST /api/debates/:id/reviews", () => {
     expect(retryAfter).toBeLessThanOrEqual(60 * 60);
   });
 
-  test("when the oldest counted review fails, the next oldest decides retryAt", async () => {
+  test("a review that fails stops holding a slot, so retryAt moves", async () => {
     const { fan, userId } = await newFan(baseUrl, true);
     const oldest = await seedReview(userId, 10);
-    const nextOldest = await seedReview(userId, 5);
+    const secondOldest = await seedReview(userId, 5);
     await seedReview(userId, 2);
     await seedReview(userId, 1);
     const debateId = await insertDebate(userId);
 
+    // 4 counted reviews and a limit of 3: two have to age out before the count drops
+    // below 3, so the second oldest decides when a slot frees up
     const before = await errorOf(await startReview(fan, debateId));
-    expect(before.retryAt).toBe(new Date(oldest.createdAt.getTime() + 24 * HOUR_MS).toISOString());
+    expect(before.retryAt).toBe(new Date(secondOldest.createdAt.getTime() + 24 * HOUR_MS).toISOString());
 
-    await prisma.review.update({ where: { id: oldest.reviewId }, data: { status: "FAILED" } });
+    // once it fails it no longer counts: 3 are left, and now the oldest decides
+    await prisma.review.update({ where: { id: secondOldest.reviewId }, data: { status: "FAILED" } });
     const after = await errorOf(await startReview(fan, debateId));
 
     expect(after.code).toBe("REVIEW_LIMIT_REACHED");
-    expect(after.retryAt).toBe(new Date(nextOldest.createdAt.getTime() + 24 * HOUR_MS).toISOString());
+    expect(after.retryAt).toBe(new Date(oldest.createdAt.getTime() + 24 * HOUR_MS).toISOString());
   });
 
   test("a fan at the cap still gets back a review that already exists", async () => {
@@ -763,12 +779,17 @@ describe.skipIf(!hasTestDatabase)("timeouts and restarts", () => {
     const stuck = makeGate();
     const stuckAgents: RunAgentFn = async (_agent, input) => {
       if (input.startsWith("Claims:")) {
-        return JSON.stringify(factCheckerOutput);
+        return reply(factCheckerOutput);
       }
       await stuck.promise;
-      return JSON.stringify(moderatorOutput);
+      return reply(moderatorOutput);
     };
-    const quick = await startTestServer({ runAgentFn: stuckAgents, searchWebFn: fakeSearch, timeoutMs: 500 });
+    const quick = await startTestServer({
+      runAgentFn: stuckAgents,
+      searchWebFn: fakeSearch,
+      timeoutMs: 500,
+      retryDelayMs: 0,
+    });
 
     try {
       const { fan, userId } = await newFan(quick.baseUrl, true);
@@ -786,6 +807,20 @@ describe.skipIf(!hasTestDatabase)("timeouts and restarts", () => {
       expect(review.status).toBe("FAILED");
       expect(review.failureReason).toStartWith("timeout:");
       expect(review.claims).toHaveLength(0);
+
+      // the moderator call that was running is still recorded. after it, a timed out
+      // review holds no daily budget, so no search or fact checker call may start
+      let moderatorCalls = 0;
+      for (let tries = 0; tries < 50 && moderatorCalls === 0; tries++) {
+        moderatorCalls = await prisma.aiCall.count({ where: { reviewId: reviewId, step: "MODERATOR" } });
+        if (moderatorCalls === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+      expect(moderatorCalls).toBe(1);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const laterCalls = await prisma.aiCall.count({ where: { reviewId: reviewId, step: { not: "MODERATOR" } } });
+      expect(laterCalls).toBe(0);
     } finally {
       quick.server.close();
     }
@@ -809,5 +844,345 @@ describe.skipIf(!hasTestDatabase)("timeouts and restarts", () => {
     const messages = await readSse(await openStream(running.id));
     expect(eventNames(messages)).toEqual(["review_failed"]);
     expect(messages[0]?.data.failure.category).toBe("restart");
+  });
+});
+
+describe.skipIf(!hasTestDatabase)("runner crashes", () => {
+  test("a crash outside the pipeline fails the review instead of leaving it QUEUED", async () => {
+    const { userId } = await newFan(baseUrl, true);
+    const debateId = await insertDebate(userId);
+    const queued = await prisma.review.create({ data: { debateId: debateId, status: "QUEUED" } });
+
+    // a debate id that isn't a uuid makes loading the debate text throw, before the pipeline
+    const runner = createReviewRunner({ runAgentFn: fakeAgents, searchWebFn: fakeSearch, retryDelayMs: 0 });
+    const received: StreamMessage[] = [];
+    const finalEvent = new Promise<void>((resolve) => {
+      runner.subscribe(queued.id, (message) => {
+        received.push(message);
+        resolve();
+      });
+    });
+
+    runner.start(queued.id, "not-a-uuid");
+    await finalEvent;
+
+    const review = await prisma.review.findUniqueOrThrow({ where: { id: queued.id } });
+    expect(review.status).toBe("FAILED");
+    expect(review.failureReason).toBe("internal: runner crashed");
+    expect(review.completedAt).not.toBeNull();
+
+    // open streams get the final event, with the safe category only
+    expect(received).toHaveLength(1);
+    expect(received[0]?.event).toBe("review_failed");
+    expect(JSON.stringify(received[0])).toContain("internal");
+    expect(JSON.stringify(received[0])).not.toContain("runner crashed");
+  });
+});
+
+describe.skipIf(!hasTestDatabase)("ai call recording", () => {
+  test("a review started from the api records one row per gemini attempt", async () => {
+    const { fan, userId } = await newFan(baseUrl, true);
+    const debateId = await insertDebate(userId);
+
+    const reviewId = await startAndReadId(fan, debateId);
+    await waitUntilEnded(reviewId);
+
+    const calls = await prisma.aiCall.findMany({ where: { reviewId: reviewId }, orderBy: { id: "asc" } });
+    const steps: string[] = [];
+    for (const call of calls) {
+      steps.push(call.step);
+    }
+    expect(steps).toEqual(["MODERATOR", "SEARCH", "FACT_CHECKER"]);
+    const review = await prisma.review.findUniqueOrThrow({ where: { id: reviewId } });
+    expect(review.aiCallCount).toBe(3);
+  });
+
+  test("a search failing with 429 is tried twice and both attempts are recorded", async () => {
+    const { fan, userId } = await newFan(baseUrl, true);
+    const debateId = await insertDebate(userId);
+    control.searchFails = true;
+
+    const reviewId = await startAndReadId(fan, debateId);
+    await waitUntilEnded(reviewId);
+
+    const searches = await prisma.aiCall.findMany({
+      where: { reviewId: reviewId, step: "SEARCH" },
+      orderBy: { id: "asc" },
+    });
+    expect(searches).toHaveLength(2);
+    expect(searches[0]?.status).toBe("ERROR");
+    expect(searches[1]?.status).toBe("ERROR");
+    expect(searches[1]?.attempt).toBe(2);
+    expect(searches[0]?.error).toContain("429");
+  });
+});
+
+// the daily gemini budget. the whole test run shares one database, so each test
+// starts its own server with a limit measured from where the budget is right now
+
+// a daily limit with room for exactly `reviews` more reviews (16 calls each)
+async function limitWithRoomFor(reviews: number): Promise<number> {
+  const now = await getBudgetStatus(1_000_000);
+  return now.used + now.reserved + 16 * reviews;
+}
+
+// a server with the usual fakes and its own daily limit
+function startBudgetServer(aiDailyCallLimit: number) {
+  return startTestServer(
+    { runAgentFn: fakeAgents, searchWebFn: fakeSearch, retryDelayMs: 0 },
+    { AI_DAILY_CALL_LIMIT: String(aiDailyCallLimit) },
+  );
+}
+
+// "00:00:00" when the time is midnight in pacific time
+function pacificClock(at: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Los_Angeles",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(at);
+}
+
+async function makeAdmin(userId: string) {
+  await prisma.user.update({ where: { id: userId }, data: { role: "ADMIN" } });
+}
+
+describe.skipIf(!hasTestDatabase)("daily gemini budget", () => {
+  test("with room for one more review, the next start gets 503 until midnight pacific", async () => {
+    const quick = await startBudgetServer(await limitWithRoomFor(1));
+    try {
+      const { fan, userId } = await newFan(quick.baseUrl, true);
+      const firstDebate = await insertDebate(userId);
+      const secondDebate = await insertDebate(userId);
+      control.moderatorGate = makeGate();
+
+      const first = await startReview(fan, firstDebate);
+      expect(first.status).toBe(202);
+      const firstId = StartReviewResponse.parse(await first.json()).review.id;
+
+      const second = await startReview(fan, secondDebate);
+
+      expect(second.status).toBe(503);
+      const error = await errorOf(second);
+      expect(error.code).toBe("DAILY_BUDGET_REACHED");
+      expect(error.message).toStartWith("VAR is resting for today. Reviews open again at ");
+      const retryAt = new Date(error.retryAt!);
+      expect(pacificClock(retryAt)).toBe("00:00:00");
+      const status = await getBudgetStatus(1_000_000);
+      expect(retryAt.toISOString()).toBe(status.resetsAt.toISOString());
+
+      // Retry-After is the seconds left until then, rounded up
+      const expectedSeconds = Math.ceil((retryAt.getTime() - Date.now()) / 1000);
+      const retryAfter = Number(second.headers.get("Retry-After"));
+      expect(retryAfter).toBeGreaterThanOrEqual(1);
+      expect(Math.abs(retryAfter - expectedSeconds)).toBeLessThanOrEqual(5);
+
+      // no review row for the refused start
+      const count = await prisma.review.count({ where: { debateId: secondDebate } });
+      expect(count).toBe(0);
+
+      control.moderatorGate.open();
+      await waitUntilEnded(firstId);
+    } finally {
+      quick.server.close();
+    }
+  });
+
+  test("a finished review gives back the calls it didn't use", async () => {
+    // room for one review plus the 3 calls the fake review really makes
+    const quick = await startBudgetServer((await limitWithRoomFor(1)) + 3);
+    try {
+      const { fan, userId } = await newFan(quick.baseUrl, true);
+      const firstDebate = await insertDebate(userId);
+      const secondDebate = await insertDebate(userId);
+      control.moderatorGate = makeGate();
+
+      const firstId = await startAndReadId(fan, firstDebate);
+      // while it runs it holds all 16 calls
+      const whileRunning = await startReview(fan, secondDebate);
+      expect(whileRunning.status).toBe(503);
+
+      control.moderatorGate.open();
+      await waitUntilEnded(firstId);
+
+      const afterwards = await startReview(fan, secondDebate);
+      expect(afterwards.status).toBe(202);
+      await waitUntilEnded(StartReviewResponse.parse(await afterwards.json()).review.id);
+    } finally {
+      quick.server.close();
+    }
+  });
+
+  test("two starts on different debates at the same moment with room for one: one 202, one 503", async () => {
+    const quick = await startBudgetServer(await limitWithRoomFor(1));
+    try {
+      const first = await newFan(quick.baseUrl, true);
+      const second = await newFan(quick.baseUrl, true);
+      const debateA = await insertDebate(first.userId);
+      const debateB = await insertDebate(second.userId);
+      control.moderatorGate = makeGate();
+
+      const responses = await Promise.all([startReview(first.fan, debateA), startReview(second.fan, debateB)]);
+
+      const statuses = [responses[0].status, responses[1].status].sort();
+      expect(statuses).toEqual([202, 503]);
+      const count = await prisma.review.count({ where: { debateId: { in: [debateA, debateB] } } });
+      expect(count).toBe(1);
+
+      control.moderatorGate.open();
+      for (const response of responses) {
+        if (response.status === 202) {
+          await waitUntilEnded(StartReviewResponse.parse(await response.json()).review.id);
+        }
+      }
+    } finally {
+      quick.server.close();
+    }
+  });
+
+  test("a debate's existing review is still returned with 200 when the budget is out", async () => {
+    const quick = await startBudgetServer((await limitWithRoomFor(1)) - 1);
+    try {
+      const { fan, userId } = await newFan(quick.baseUrl, true);
+      const debateId = await insertDebate(userId);
+      const existing = await prisma.review.create({ data: { debateId: debateId, status: "COMPLETE" } });
+
+      const response = await startReview(fan, debateId);
+
+      expect(response.status).toBe(200);
+      expect(StartReviewResponse.parse(await response.json()).review.id).toBe(existing.id);
+    } finally {
+      quick.server.close();
+    }
+  });
+
+  test("an admin past 3 reviews in 24h can still start one", async () => {
+    const { fan, userId } = await newFan(baseUrl, true);
+    await makeAdmin(userId);
+    await seedReview(userId, 3);
+    await seedReview(userId, 2);
+    await seedReview(userId, 1);
+    const debateId = await insertDebate(userId);
+
+    const response = await startReview(fan, debateId);
+
+    expect(response.status).toBe(202);
+    await waitUntilEnded(StartReviewResponse.parse(await response.json()).review.id);
+  });
+
+  test("an admin is refused like everyone else when the budget is out", async () => {
+    const quick = await startBudgetServer((await limitWithRoomFor(1)) - 1);
+    try {
+      const { fan, userId } = await newFan(quick.baseUrl, true);
+      await makeAdmin(userId);
+      const debateId = await insertDebate(userId);
+
+      const response = await startReview(fan, debateId);
+
+      expect(response.status).toBe(503);
+      expect((await errorOf(response)).code).toBe("DAILY_BUDGET_REACHED");
+    } finally {
+      quick.server.close();
+    }
+  });
+
+  test("the fan cap reads its limit from REVIEW_DAILY_LIMIT", async () => {
+    const quick = await startTestServer(
+      { runAgentFn: fakeAgents, searchWebFn: fakeSearch, retryDelayMs: 0 },
+      { REVIEW_DAILY_LIMIT: "5" },
+    );
+    try {
+      const { fan, userId } = await newFan(quick.baseUrl, true);
+      await seedReview(userId, 3);
+      await seedReview(userId, 2);
+      await seedReview(userId, 1);
+      const debateId = await insertDebate(userId);
+
+      // 3 reviews in 24h is fine when the limit is 5
+      const response = await startReview(fan, debateId);
+
+      expect(response.status).toBe(202);
+      await waitUntilEnded(StartReviewResponse.parse(await response.json()).review.id);
+    } finally {
+      quick.server.close();
+    }
+  });
+});
+
+describe.skipIf(!hasTestDatabase)("GET /api/reviews/availability", () => {
+  test("open while a review still fits, with when the budget resets and nothing else", async () => {
+    // signed out: availability is public
+    const response = await fetch(`${baseUrl}/api/reviews/availability`);
+
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as object;
+    // never the call counts, only these two fields
+    expect(Object.keys(json).sort()).toEqual(["open", "resetsAt"]);
+    const body = AvailabilityResponse.parse(json);
+    expect(body.open).toBe(true);
+    expect(pacificClock(new Date(body.resetsAt))).toBe("00:00:00");
+  });
+
+  test("closed when one more review wouldn't fit", async () => {
+    const limit = (await limitWithRoomFor(1)) - 1;
+    const quick = await startBudgetServer(limit);
+    try {
+      const response = await fetch(`${quick.baseUrl}/api/reviews/availability`);
+
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as object;
+      expect(Object.keys(json).sort()).toEqual(["open", "resetsAt"]);
+      const body = AvailabilityResponse.parse(json);
+      expect(body.open).toBe(false);
+      const status = await getBudgetStatus(limit);
+      expect(body.resetsAt).toBe(status.resetsAt.toISOString());
+    } finally {
+      quick.server.close();
+    }
+  });
+});
+
+describe.skipIf(!hasTestDatabase)("when the budget can't be checked", () => {
+  // hides the ai_calls table for a moment, so the budget query really fails
+  // like a database outage would, then puts it back
+  async function withAiCallsHidden(run: () => Promise<void>) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "ai_calls" RENAME TO "ai_calls_hidden"`);
+    try {
+      await run();
+    } finally {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "ai_calls_hidden" RENAME TO "ai_calls"`);
+    }
+  }
+
+  test("a start answers 503 SERVICE_UNAVAILABLE and creates nothing", async () => {
+    const { fan, userId } = await newFan(baseUrl, true);
+    const debateId = await insertDebate(userId);
+
+    let status = 0;
+    let code = "";
+    await withAiCallsHidden(async () => {
+      const response = await startReview(fan, debateId);
+      status = response.status;
+      code = (await errorOf(response)).code;
+    });
+
+    expect(status).toBe(503);
+    expect(code).toBe("SERVICE_UNAVAILABLE");
+    const count = await prisma.review.count({ where: { debateId: debateId } });
+    expect(count).toBe(0);
+  });
+
+  test("availability answers 503 SERVICE_UNAVAILABLE too", async () => {
+    let status = 0;
+    let code = "";
+    await withAiCallsHidden(async () => {
+      const response = await fetch(`${baseUrl}/api/reviews/availability`);
+      status = response.status;
+      code = (await errorOf(response)).code;
+    });
+
+    expect(status).toBe(503);
+    expect(code).toBe("SERVICE_UNAVAILABLE");
   });
 });

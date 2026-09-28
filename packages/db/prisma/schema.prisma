@@ -347,8 +347,11 @@ model Review {
   summary          String?
   failureReason    String?       @map("failure_reason")
   model            String? // Gemini model id used
+  // totals of every gemini attempt of this review. they stay after the ai_calls rows are cleaned up
   inputTokens      Int           @default(0) @map("input_tokens")
   outputTokens     Int           @default(0) @map("output_tokens")
+  thinkingTokens   Int           @default(0) @map("thinking_tokens")
+  aiCallCount      Int           @default(0) @map("ai_call_count")
   costUsd          Decimal?      @map("cost_usd") @db.Decimal(10, 6)
   debate           Debate        @relation(fields: [debateId], references: [id], onDelete: Cascade)
   // who asked for it. only used for the daily cap, never shown. null = account deleted
@@ -357,6 +360,7 @@ model Review {
   claims           Claim[]
   evidence         Evidence[]
   events           ReviewEvent[]
+  aiCalls          AiCall[]
   createdAt        DateTime      @default(now()) @map("created_at")
   startedAt        DateTime?     @map("started_at")
   completedAt      DateTime?     @map("completed_at")
@@ -382,6 +386,44 @@ enum VarDecision {
   CONFIRMED
   OVERTURNED
   INCONCLUSIVE
+}
+
+// One row per gemini attempt (retries are their own rows). The trace shows them
+// and the daily budget counts them. Rows older than 48 hours are cleaned up.
+model AiCall {
+  id             BigInt       @id @default(autoincrement())
+  // null when the review was deleted: the call still counts toward today's budget
+  reviewId       String?      @map("review_id") @db.Uuid
+  review         Review?      @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+  step           AiCallStep
+  attempt        Int // 1, 2, 3
+  claimOrder     Int?         @map("claim_order") // searches only
+  model          String
+  status         AiCallStatus
+  error          String? // raw error text, never sent to the public
+  inputTokens    Int          @default(0) @map("input_tokens")
+  outputTokens   Int          @default(0) @map("output_tokens")
+  thinkingTokens Int          @default(0) @map("thinking_tokens")
+  durationMs     Int          @map("duration_ms")
+  // with time zone, so the midnight pacific budget math compares cleanly
+  startedAt      DateTime     @map("started_at") @db.Timestamptz(3)
+
+  // the daily budget count and the cleanup
+  @@index([startedAt])
+  // one review's trace and its reserve
+  @@index([reviewId])
+  @@map("ai_calls")
+}
+
+enum AiCallStep {
+  MODERATOR
+  SEARCH
+  FACT_CHECKER
+}
+
+enum AiCallStatus {
+  OK
+  ERROR
 }
 
 // Saved progress, so the live stream can replay after a reload.

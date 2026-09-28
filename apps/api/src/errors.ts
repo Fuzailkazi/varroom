@@ -5,7 +5,7 @@ import type { ErrorResponse, FieldError } from "@varroom/shared";
 export type ErrorExtras = {
   fields?: FieldError[]; // VALIDATION_FAILED
   existingId?: string | null; // DUPLICATE_DEBATE, DUPLICATE_COMMENT
-  retryAt?: string; // REVIEW_LIMIT_REACHED
+  retryAt?: string; // REVIEW_LIMIT_REACHED, DAILY_BUDGET_REACHED
 };
 
 // Every error our own routes send looks the same:
