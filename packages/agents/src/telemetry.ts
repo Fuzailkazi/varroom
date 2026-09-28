@@ -1,13 +1,22 @@
 import { maybeSetOtelProviders } from "@google/adk";
 import type { OTelHooks } from "@google/adk";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 
 // Optional export of ADK's traces to Langfuse, a hosted UI for looking at
 // agent runs. ADK already records OpenTelemetry spans (one per agent run and
-// one per model call). Here we only tell ADK where to send them.
+// one per model call). Here we build the exporter that sends them.
 //
 // It is off unless both Langfuse keys are set, so tests and a fresh .env
 // export nothing. It can never fail a review: spans are sent in the
 // background, in batches, and a failed send is dropped quietly.
+//
+// Only ADK's spans are sent. Once a tracer provider exists, other libraries
+// that speak OpenTelemetry (better auth, for sign in and session lookups)
+// record spans too, and those don't belong in Langfuse.
+
+// the tracer name ADK records its spans under
+export const ADK_TRACER_NAME = "gcp.vertex.agent";
 
 export const DEFAULT_LANGFUSE_HOST = "https://cloud.langfuse.com";
 
@@ -30,8 +39,13 @@ export type LangfuseExportConfig = {
 export type SetProvidersFn = (hooks: OTelHooks[]) => void;
 
 // one span processor, the type ADK expects inside its hooks
-type SpanProcessor = NonNullable<OTelHooks["spanProcessors"]>[number];
+export type SpanProcessor = NonNullable<OTelHooks["spanProcessors"]>[number];
 type WritableSpan = Parameters<SpanProcessor["onStart"]>[0];
+type FinishedSpan = Parameters<SpanProcessor["onEnd"]>[0];
+
+// the processor that sends spans to Langfuse, kept so the cli can flush it
+// before it exits. null while tracing is off
+let exportProcessor: SpanProcessor | null = null;
 
 // reads an env var, treating blank as unset
 function readSetting(env: TracingEnv, name: string): string | null {
@@ -78,19 +92,48 @@ export function langfuseExportConfig(env: TracingEnv): LangfuseExportConfig | nu
   };
 }
 
-// ADK builds its exporter from the standard OpenTelemetry env vars, so this
-// turns our settings into those. Headers are written as key=value pairs
-// joined by commas, with each value url encoded (base64 can contain "=").
-export function otelTraceEnvVars(config: LangfuseExportConfig): Record<string, string> {
-  const pairs: string[] = [];
-  for (const [name, value] of Object.entries(config.headers)) {
-    pairs.push(`${name}=${encodeURIComponent(value)}`);
+// Wraps a processor so it only sees ADK's spans. Every other finished span
+// (better auth's, for example) is dropped here and never exported.
+export function onlyAdkSpans(next: SpanProcessor): SpanProcessor {
+  return {
+    onStart(span, parentContext) {
+      next.onStart(span, parentContext);
+    },
+    onEnd(span: FinishedSpan) {
+      if (span.instrumentationScope.name === ADK_TRACER_NAME) {
+        next.onEnd(span);
+      }
+    },
+    forceFlush() {
+      return next.forceFlush();
+    },
+    shutdown() {
+      return next.shutdown();
+    },
+  };
+}
+
+// Sends any spans still waiting in the batch. The cli calls it before it
+// exits, because the batch goes out every few seconds and a finished process
+// would drop it. Gives up after timeoutMs so a slow Langfuse can't hang the
+// cli, and never throws. Does nothing while tracing is off.
+export async function flushTracing(timeoutMs: number = 5000, processor: SpanProcessor | null = exportProcessor): Promise<void> {
+  if (processor === null) {
+    return;
   }
 
-  return {
-    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: config.tracesEndpoint,
-    OTEL_EXPORTER_OTLP_TRACES_HEADERS: pairs.join(","),
-  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const giveUp = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, timeoutMs);
+  });
+
+  try {
+    await Promise.race([processor.forceFlush(), giveUp]);
+  } catch (err) {
+    console.error("tracing: could not send the last traces:", err);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // the session id ADK wrote on a span, if any. agent spans carry it as
@@ -164,16 +207,16 @@ export function setupTracing(env: TracingEnv = process.env, setProviders: SetPro
       return false;
     }
 
-    // 1. tell ADK's bundled OTLP exporter where to send spans
-    const otelVars = otelTraceEnvVars(config);
-    for (const [name, value] of Object.entries(otelVars)) {
-      process.env[name] = value;
-    }
+    // 1. our own exporter, sending in the background in batches, behind the
+    // ADK only filter. we don't set the OTEL_EXPORTER_OTLP_* env vars, so ADK
+    // adds no exporter of its own that would send every span unfiltered
+    const exporter = new OTLPTraceExporter({ url: config.tracesEndpoint, headers: config.headers });
+    const processor = onlyAdkSpans(new BatchSpanProcessor(exporter));
 
-    // 2. register the providers. ADK adds its exporter (sending in the
-    // background, in batches) because the endpoint above is now set.
-    // Our tagger runs first, so every span it tags is sent tagged
-    setProviders([{ spanProcessors: [reviewSessionTagger()] }]);
+    // 2. register the providers. the tagger runs first, so every span the
+    // filter passes on is already tagged with its review id
+    setProviders([{ spanProcessors: [reviewSessionTagger(), processor] }]);
+    exportProcessor = processor;
 
     console.log(`tracing: sending ADK traces to ${config.tracesEndpoint}`);
     return true;

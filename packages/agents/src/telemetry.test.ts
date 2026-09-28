@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { BaseLlm, LLMRegistry } from "@google/adk";
 import type { BaseLlmConnection, LlmRequest, LlmResponse, OTelHooks } from "@google/adk";
+import { trace } from "@opentelemetry/api";
 import {
+  ADK_TRACER_NAME,
   DEFAULT_LANGFUSE_HOST,
   LANGFUSE_SESSION_ATTRIBUTE,
   LANGFUSE_TRACES_PATH,
+  flushTracing,
   langfuseExportConfig,
-  otelTraceEnvVars,
+  onlyAdkSpans,
   reviewSessionTagger,
   setupTracing,
 } from "./telemetry.ts";
+import type { SpanProcessor } from "./telemetry.ts";
 import { runPipeline } from "./pipeline.ts";
 import type { SearchWebFn } from "./pipeline.ts";
 
@@ -18,7 +22,8 @@ const KEYS = { LANGFUSE_PUBLIC_KEY: "pk-lf-test", LANGFUSE_SECRET_KEY: "sk-lf-te
 // what "Basic <base64 of pk:sk>" should be for the keys above
 const EXPECTED_AUTHORIZATION = `Basic ${btoa("pk-lf-test:sk-lf-test")}`;
 
-// the env vars setupTracing writes for ADK. every test puts them back
+// if these were set, ADK would add an exporter of its own that sends every
+// span unfiltered. setupTracing must never set them. every test clears them
 const OTEL_VARS = ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_HEADERS"];
 
 function clearOtelVars() {
@@ -83,28 +88,95 @@ describe("langfuseExportConfig", () => {
   });
 });
 
-describe("otelTraceEnvVars", () => {
-  test("writes the endpoint and the headers as url encoded key=value pairs", () => {
-    const config = langfuseExportConfig(KEYS);
-    if (config === null) throw new Error("expected a config");
+// a processor that only remembers which spans reached it, and whether it was flushed
+function makeRecordingProcessor() {
+  const ended: string[] = [];
+  let flushed = 0;
+  const processor = {
+    onStart() {},
+    onEnd(span: { name: string }) {
+      ended.push(span.name);
+    },
+    forceFlush() {
+      flushed++;
+      return Promise.resolve();
+    },
+    shutdown() {
+      return Promise.resolve();
+    },
+  };
+  return { processor: processor as unknown as SpanProcessor, ended, flushCount: () => flushed };
+}
 
-    const vars = otelTraceEnvVars(config);
+type EndedSpan = Parameters<SpanProcessor["onEnd"]>[0];
 
-    expect(vars.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT).toBe(config.tracesEndpoint);
-    const pairs = vars.OTEL_EXPORTER_OTLP_TRACES_HEADERS?.split(",") ?? [];
-    expect(pairs).toEqual([
-      `Authorization=${encodeURIComponent(EXPECTED_AUTHORIZATION)}`,
-      "x-langfuse-ingestion-version=4",
-    ]);
+// a finished span made by the library called scopeName
+function finishedSpan(name: string, scopeName: string): EndedSpan {
+  return { name: name, instrumentationScope: { name: scopeName } } as unknown as EndedSpan;
+}
+
+describe("onlyAdkSpans", () => {
+  test("passes ADK's spans on", () => {
+    const recorder = makeRecordingProcessor();
+    const filter = onlyAdkSpans(recorder.processor);
+
+    filter.onEnd(finishedSpan("invoke_agent moderator", ADK_TRACER_NAME));
+
+    expect(recorder.ended).toEqual(["invoke_agent moderator"]);
   });
 
-  test("a base64 value with = signs survives the encoding", () => {
-    // "a:b" is "YTpi", "ab:c" is "YWI6Yw==": the second one has padding
-    const vars = otelTraceEnvVars({ tracesEndpoint: "https://x.test", headers: { Authorization: "Basic YWI6Yw==" } });
+  test("drops spans from any other library, like better auth's sign in lookups", () => {
+    const recorder = makeRecordingProcessor();
+    const filter = onlyAdkSpans(recorder.processor);
 
-    expect(vars.OTEL_EXPORTER_OTLP_TRACES_HEADERS).toBe("Authorization=Basic%20YWI6Yw%3D%3D");
-    const value = vars.OTEL_EXPORTER_OTLP_TRACES_HEADERS?.split("=").slice(1).join("=") ?? "";
-    expect(decodeURIComponent(value)).toBe("Basic YWI6Yw==");
+    filter.onEnd(finishedSpan("db findOne user", "better-auth"));
+    filter.onEnd(finishedSpan("handler /get-session", "better-auth"));
+    filter.onEnd(finishedSpan("GET /api/health", "@opentelemetry/instrumentation-http"));
+
+    expect(recorder.ended).toEqual([]);
+  });
+
+  test("flushing the filter flushes the processor behind it", async () => {
+    const recorder = makeRecordingProcessor();
+
+    await onlyAdkSpans(recorder.processor).forceFlush();
+
+    expect(recorder.flushCount()).toBe(1);
+  });
+});
+
+describe("flushTracing", () => {
+  test("does nothing while tracing is off", async () => {
+    await flushTracing(5000, null);
+  });
+
+  test("sends what's waiting by flushing the export processor", async () => {
+    const recorder = makeRecordingProcessor();
+
+    await flushTracing(5000, recorder.processor);
+
+    expect(recorder.flushCount()).toBe(1);
+  });
+
+  test("gives up after the time limit when Langfuse never answers", async () => {
+    const stuck = { ...makeRecordingProcessor().processor, forceFlush: () => new Promise<void>(() => {}) };
+
+    const started = Date.now();
+    await flushTracing(100, stuck as SpanProcessor);
+
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  test("never throws when the flush fails", async () => {
+    const logged = spyOn(console, "error").mockImplementation(() => {});
+    const broken = { ...makeRecordingProcessor().processor, forceFlush: () => Promise.reject(new Error("offline")) };
+
+    try {
+      await flushTracing(1000, broken as SpanProcessor);
+      expect(logged).toHaveBeenCalledTimes(1);
+    } finally {
+      logged.mockRestore();
+    }
   });
 });
 
@@ -119,17 +191,16 @@ describe("setupTracing", () => {
     expect(process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT).toBeUndefined();
   });
 
-  test("with keys it points ADK's exporter at Langfuse and adds the review id tagger", () => {
+  test("with keys it registers the review id tagger and our own filtered exporter", () => {
     const fake = makeFakeSetProviders();
 
     expect(setupTracing(KEYS, fake.setProviders)).toBe(true);
 
-    expect(process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT).toBe(DEFAULT_LANGFUSE_HOST + LANGFUSE_TRACES_PATH);
-    expect(process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS).toContain(
-      `Authorization=${encodeURIComponent(EXPECTED_AUTHORIZATION)}`
-    );
     expect(fake.calls).toHaveLength(1);
-    expect(fake.calls[0]?.[0]?.spanProcessors).toHaveLength(1);
+    expect(fake.calls[0]?.[0]?.spanProcessors).toHaveLength(2);
+    // no OTEL_* vars, so ADK adds no unfiltered exporter of its own
+    expect(process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT).toBeUndefined();
+    expect(process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS).toBeUndefined();
   });
 
   test("a bad LANGFUSE_HOST keeps tracing off without throwing", () => {
@@ -390,13 +461,18 @@ describe("setupTracing with a real ADK run", () => {
         // 2. spans leave in the background after the review, so it never waited on them
         expect(collector.received).toHaveLength(0);
 
-        // 3. ADK's exporter sends its batch a few seconds later, to Langfuse's path with basic auth
-        await waitUntil(() => collector.received.length > 0, 12_000);
+        // 3. another library records a span too, the way better auth does on sign in
+        trace.getTracer("better-auth").startSpan("db findOne user").end();
+
+        // 4. flushing sends the waiting batch now, to Langfuse's path with basic auth
+        await flushTracing();
+        await waitUntil(() => collector.received.length > 0, 5_000);
         const sent = collector.received[0];
         expect(sent?.path).toBe(LANGFUSE_TRACES_PATH);
         expect(sent?.authorization).toBe(EXPECTED_AUTHORIZATION);
 
-        // 4. both agent runs are there: the outer span, the agent span and its model call
+        // 5. only ADK's spans were sent, better auth's was dropped. both agent
+        // runs are there: the outer span, the agent span and its model call
         const spans = spansIn(sent?.body);
         const names = spans.map((span) => span.name).sort();
         expect(names).toEqual([
@@ -408,7 +484,7 @@ describe("setupTracing with a real ADK run", () => {
           "invoke_agent moderator",
         ]);
 
-        // 5. and every one of them carries the review id, so Langfuse groups them
+        // 6. and every one of them carries the review id, so Langfuse groups them
         for (const span of spans) {
           expect(span.attributes.get(LANGFUSE_SESSION_ATTRIBUTE)).toBe(REVIEW_ID);
         }

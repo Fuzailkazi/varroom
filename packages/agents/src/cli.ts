@@ -9,7 +9,7 @@ import type { UsageLimits } from "@varroom/shared";
 import { geminiModel, runReview } from "./index.ts";
 import { PipelineError, ReviewStoppedError } from "./types.ts";
 import { formatReview } from "./format.ts";
-import { setupTracing } from "./telemetry.ts";
+import { flushTracing, setupTracing } from "./telemetry.ts";
 
 async function main() {
   const text = process.argv[2];
@@ -109,13 +109,18 @@ async function main() {
     }
   }, REVIEW_TIMEOUT_MS);
 
+  // we exit with an error only after the finally block below: process.exit()
+  // inside the try or catch would skip it, and the last traces with it
+  let failed = false;
+
   try {
     const result = await runReview(reviewId, text, { shouldStop: () => timedOut });
     if (!result) {
       console.error("The review was not QUEUED anymore, nothing to run.");
-      process.exit(1);
+      failed = true;
+    } else {
+      console.log(formatReview(result));
     }
-    console.log(formatReview(result));
   } catch (err) {
     if (err instanceof ReviewStoppedError) {
       console.error("\nThe review ended before it finished (it timed out, or its debate was deleted).");
@@ -124,9 +129,15 @@ async function main() {
     } else {
       console.error("\nPipeline failed:", err instanceof Error ? err.message : String(err));
     }
-    process.exit(1);
+    failed = true;
   } finally {
     clearTimeout(timer);
+    // spans leave in batches every few seconds. send what's waiting before we exit
+    await flushTracing();
+  }
+
+  if (failed) {
+    process.exit(1);
   }
 }
 
