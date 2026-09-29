@@ -24,3 +24,9 @@ docs/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# AI and agent tooling
+.agents/
+.claude/
+skills-lock.json
+test-preferences.json
