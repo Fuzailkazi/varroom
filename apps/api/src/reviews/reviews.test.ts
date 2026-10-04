@@ -1108,6 +1108,49 @@ describe.skipIf(!hasTestDatabase)("daily gemini budget", () => {
       quick.server.close();
     }
   });
+
+  test("a review already running finishes normally, even once today's calls go past the limit", async () => {
+    const limit = await limitWithRoomFor(1);
+    const quick = await startBudgetServer(limit);
+    try {
+      const { fan, userId } = await newFan(quick.baseUrl, true);
+      const debateId = await insertDebate(userId);
+      control.moderatorGate = makeGate();
+
+      // 1. start the one review that fits, and pause it in the moderator
+      const reviewId = await startAndReadId(fan, debateId);
+
+      // 2. while it waits, other calls use up the whole day: 17 calls from a deleted review
+      //    (no review id) push "used" past the limit on their own
+      const now = new Date();
+      const otherCalls = [];
+      for (let i = 0; i < 17; i++) {
+        otherCalls.push({
+          step: "MODERATOR" as const,
+          attempt: 1,
+          model: "other-review",
+          status: "OK" as const,
+          durationMs: 1,
+          startedAt: now,
+        });
+      }
+      await prisma.aiCall.createMany({ data: otherCalls });
+      const closed = await getBudgetStatus(limit);
+      expect(closed.used).toBeGreaterThan(limit);
+
+      // 3. let the review go on
+      control.moderatorGate.open();
+      const status = await waitUntilEnded(reviewId);
+
+      // the budget never stopped it: it completed and made all 3 of its calls
+      expect(status).toBe("COMPLETE");
+      const calls = await prisma.aiCall.findMany({ where: { reviewId: reviewId }, select: { step: true, status: true } });
+      expect(calls.map((call) => call.step).sort()).toEqual(["FACT_CHECKER", "MODERATOR", "SEARCH"]);
+      expect(calls.every((call) => call.status === "OK")).toBe(true);
+    } finally {
+      quick.server.close();
+    }
+  });
 });
 
 describe.skipIf(!hasTestDatabase)("GET /api/reviews/availability", () => {

@@ -1086,6 +1086,52 @@ describe("runAttempts", () => {
 
     expect(result.text).toBe('{"ok":true}');
   });
+
+  // each of these messages means "busy right now", so the attempt is worth trying again
+  const temporaryMessages = [
+    "Gemini error 503: service unavailable",
+    "Gemini error 429: quota exceeded",
+    "The model is experiencing high demand",
+    "The model is OVERLOADED",
+    "Please try again later",
+  ];
+
+  for (const message of temporaryMessages) {
+    test(`retries a temporary error: "${message}"`, async () => {
+      const calls: AiCallRecord[] = [];
+      let attempts = 0;
+      const failsOnce = async (): Promise<AgentReply> => {
+        attempts++;
+        if (attempts === 1) {
+          throw new Error(message);
+        }
+        return reply({ ok: true });
+      };
+
+      await runAttempts("MODERATOR", 3, failsOnce, attemptContext(calls));
+
+      expect(attempts).toBe(2);
+      expect(calls.map((call) => call.status)).toEqual(["ERROR", "OK"]);
+      expect(calls[0]?.error).toBe(message);
+    });
+  }
+
+  test("a thrown string (not an Error) is still read, retried and recorded", async () => {
+    const calls: AiCallRecord[] = [];
+    let attempts = 0;
+    const throwsAString = async (): Promise<AgentReply> => {
+      attempts++;
+      if (attempts === 1) {
+        throw "503 high demand";
+      }
+      return reply({ ok: true });
+    };
+
+    await runAttempts("MODERATOR", 3, throwsAString, attemptContext(calls));
+
+    expect(attempts).toBe(2);
+    expect(calls[0]?.error).toBe("503 high demand");
+  });
 });
 
 // a fake adk run: yields the given events one by one
