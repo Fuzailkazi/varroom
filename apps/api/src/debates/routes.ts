@@ -1,6 +1,4 @@
-import { Router } from "express";
-import type { Request, Response } from "express";
-import { z } from "zod";
+import type { DebateRow } from "@varroom/db";
 import {
   countDebatesSince,
   createDebate,
@@ -15,7 +13,7 @@ import {
   listTags,
   setVote,
 } from "@varroom/db";
-import type { DebateRow } from "@varroom/db";
+import type { Debate, FieldError } from "@varroom/shared";
 import {
   CreateDebateRequest,
   ListDebatesQuery,
@@ -24,7 +22,9 @@ import {
   ListTagsResponse,
   VoteRequest,
 } from "@varroom/shared";
-import type { Debate, FieldError } from "@varroom/shared";
+import type { Request, Response } from "express";
+import { Router } from "express";
+import { z } from "zod";
 import { optionalSession, requireSession, requireVerified } from "../auth/guards.ts";
 import { sendError } from "../errors.ts";
 import { validate } from "../validate.ts";
@@ -128,7 +128,9 @@ async function createDebateHandler(req: Request, res: Response) {
   // 3. duplicate check runs before the cap so a capped user still gets told it's a dupe
   const duplicateId = await findRecentDuplicate(authorId, body.title, body.thesis, oneDayAgo);
   if (duplicateId) {
-    sendError(res, 409, "DUPLICATE_DEBATE", "You already posted this debate.", { existingId: duplicateId });
+    sendError(res, 409, "DUPLICATE_DEBATE", "You already posted this debate.", {
+      existingId: duplicateId,
+    });
     return;
   }
 
@@ -168,7 +170,12 @@ async function listDebatesHandler(req: Request, res: Response) {
       exists = await debateExists(query.cursor);
     }
     if (!exists) {
-      sendError(res, 400, "INVALID_CURSOR", "This page link is out of date. Start again from the first page.");
+      sendError(
+        res,
+        400,
+        "INVALID_CURSOR",
+        "This page link is out of date. Start again from the first page.",
+      );
       return;
     }
   }

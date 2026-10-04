@@ -1,5 +1,5 @@
-import { rateLimit } from "express-rate-limit";
 import type { Request, Response } from "express";
+import { rateLimit } from "express-rate-limit";
 import { sendError } from "../errors.ts";
 
 // per ip rate limits for the public review reads, so a script can't hammer them.

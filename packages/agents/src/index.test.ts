@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, test } from "bun:test";
-import { prisma } from "@varroom/db/client";
 import { createDebate, finishReviewFailed } from "@varroom/db";
+import { prisma } from "@varroom/db/client";
 import { geminiModel, runReview } from "./index.ts";
 import type { RunAgentFn, SearchWebFn } from "./pipeline.ts";
-import { PipelineError, ReviewStoppedError } from "./types.ts";
 import type { AgentReply, SearchReply, TokenUsage, WebSource } from "./types.ts";
+import { PipelineError, ReviewStoppedError } from "./types.ts";
 
 // integration tests for runReview: the real db, fake agents and fake search (no gemini calls).
 // only run when the root test preload pointed DATABASE_URL at the neon test branch
@@ -60,7 +60,9 @@ const twoSources: SearchWebFn = async () => {
 };
 
 const verifiedWithBothSources = {
-  verdicts: [{ claimOrder: 1, verdict: "VERIFIED", reasoning: "Both agree.", citedLabels: ["E1", "E2"] }],
+  verdicts: [
+    { claimOrder: 1, verdict: "VERIFIED", reasoning: "Both agree.", citedLabels: ["E1", "E2"] },
+  ],
 };
 
 let userId: string;
@@ -96,7 +98,11 @@ async function newQueuedReview(): Promise<{ debateId: string; reviewId: string }
 }
 
 // runs the review and hands back whatever it threw, or null
-async function runAndCatch(reviewId: string, agents: RunAgentFn, search: SearchWebFn): Promise<unknown> {
+async function runAndCatch(
+  reviewId: string,
+  agents: RunAgentFn,
+  search: SearchWebFn,
+): Promise<unknown> {
   try {
     await runReview(reviewId, "text", { runAgentFn: agents, searchWebFn: search });
   } catch (err) {
@@ -106,7 +112,10 @@ async function runAndCatch(reviewId: string, agents: RunAgentFn, search: SearchW
 }
 
 // like runAndCatch, with any pipeline options
-async function runAndCatchWith(reviewId: string, options: Parameters<typeof runReview>[2]): Promise<unknown> {
+async function runAndCatchWith(
+  reviewId: string,
+  options: Parameters<typeof runReview>[2],
+): Promise<unknown> {
   try {
     await runReview(reviewId, "text", options);
   } catch (err) {
@@ -144,7 +153,11 @@ describe.skipIf(!onTestDatabase)("runReview", () => {
     const testable = review.claims[0];
     const untestable = review.claims[1];
     expect(testable?.verdict).toBe("VERIFIED");
-    expect(testable?.entities).toEqual({ player: "Bellingham", positionA: "false 9", positionB: "8" });
+    expect(testable?.entities).toEqual({
+      player: "Bellingham",
+      positionA: "false 9",
+      positionB: "8",
+    });
     expect(testable?.citations).toHaveLength(2);
     // untestable claims are never judged, so they stay PENDING in the db
     expect(untestable?.verdict).toBe("PENDING");
@@ -178,7 +191,9 @@ describe.skipIf(!onTestDatabase)("runReview", () => {
 
     // the fact checker cites nothing, so the only testable claim can't be scored
     await runReview(reviewId, "text", {
-      runAgentFn: fakeAgents({ verdicts: [{ claimOrder: 1, verdict: "VERIFIED", reasoning: "x", citedLabels: [] }] }),
+      runAgentFn: fakeAgents({
+        verdicts: [{ claimOrder: 1, verdict: "VERIFIED", reasoning: "x", citedLabels: [] }],
+      }),
       searchWebFn: twoSources,
     });
 
@@ -240,7 +255,10 @@ describe.skipIf(!onTestDatabase)("runReview", () => {
     expect(thrown).toBeInstanceOf(ReviewStoppedError);
     expect(searches).toBe(0);
     // the timeout's reason stays, the stop doesn't overwrite it
-    const review = await prisma.review.findUniqueOrThrow({ where: { id: reviewId }, include: { claims: true } });
+    const review = await prisma.review.findUniqueOrThrow({
+      where: { id: reviewId },
+      include: { claims: true },
+    });
     expect(review.status).toBe("FAILED");
     expect(review.failureReason).toBe("timeout: took too long");
     expect(review.claims).toHaveLength(0);
@@ -263,10 +281,16 @@ describe.skipIf(!onTestDatabase)("runReview", () => {
       return reply(moderatorOutput);
     };
 
-    const result = await runReview(reviewId, "text", { runAgentFn: slowFactChecker, searchWebFn: twoSources });
+    const result = await runReview(reviewId, "text", {
+      runAgentFn: slowFactChecker,
+      searchWebFn: twoSources,
+    });
 
     expect(result?.saved).toBe(false);
-    const review = await prisma.review.findUniqueOrThrow({ where: { id: reviewId }, include: { claims: true } });
+    const review = await prisma.review.findUniqueOrThrow({
+      where: { id: reviewId },
+      include: { claims: true },
+    });
     expect(review.status).toBe("FAILED");
     expect(review.failureReason).toBe("timeout: took too long");
     expect(review.claims).toHaveLength(0);
@@ -292,7 +316,10 @@ describe.skipIf(!onTestDatabase)("runReview", () => {
     });
 
     expect(thrown).toBeInstanceOf(ReviewStoppedError);
-    const steps = await prisma.aiCall.findMany({ where: { reviewId: reviewId }, orderBy: { id: "asc" } });
+    const steps = await prisma.aiCall.findMany({
+      where: { reviewId: reviewId },
+      orderBy: { id: "asc" },
+    });
     expect(steps.map((call) => call.step)).toEqual(["MODERATOR", "SEARCH"]);
 
     // whoever stops a review also ends it (the api's timeout fails it), so do that here,
@@ -310,7 +337,10 @@ describe.skipIf(!onTestDatabase)("runReview", () => {
       return reply(moderatorOutput);
     };
 
-    const result = await runReview(reviewId, "text", { runAgentFn: countingAgents, searchWebFn: twoSources });
+    const result = await runReview(reviewId, "text", {
+      runAgentFn: countingAgents,
+      searchWebFn: twoSources,
+    });
 
     expect(result).toBeNull();
     expect(agentCalls).toBe(0);
@@ -339,9 +369,16 @@ describe.skipIf(!onTestDatabase)("runReview", () => {
       return found(bothSites, searchUsage);
     };
 
-    await runReview(reviewId, "text", { runAgentFn: agents, searchWebFn: busyOnce, retryDelayMs: 0 });
+    await runReview(reviewId, "text", {
+      runAgentFn: agents,
+      searchWebFn: busyOnce,
+      retryDelayMs: 0,
+    });
 
-    const calls = await prisma.aiCall.findMany({ where: { reviewId: reviewId }, orderBy: { id: "asc" } });
+    const calls = await prisma.aiCall.findMany({
+      where: { reviewId: reviewId },
+      orderBy: { id: "asc" },
+    });
     const summary: string[] = [];
     for (const call of calls) {
       summary.push(`${call.step} #${call.attempt} claim=${call.claimOrder} ${call.status}`);
@@ -416,7 +453,12 @@ describe.skipIf(!onTestDatabase)("runReview", () => {
 
     expect(result?.saved).toBe(false);
     const orphans = await prisma.aiCall.findMany({
-      where: { reviewId: null, step: "MODERATOR", startedAt: { gte: startedBefore }, inputTokens: 7 },
+      where: {
+        reviewId: null,
+        step: "MODERATOR",
+        startedAt: { gte: startedBefore },
+        inputTokens: 7,
+      },
     });
     expect(orphans.length).toBeGreaterThanOrEqual(1);
     expect(orphans[0]?.status).toBe("OK");

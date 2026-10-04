@@ -16,7 +16,7 @@ export const ModeratorOutput = z.object({
         positionA: z.string(),
         positionB: z.string().optional(), // absent for UNTESTABLE claims
       }),
-    })
+    }),
   ),
 });
 
@@ -34,7 +34,7 @@ export const FactCheckerOutput = z.object({
       verdict: z.enum(["VERIFIED", "PARTIALLY_TRUE", "REFUTED"]),
       reasoning: z.string(),
       citedLabels: z.array(z.string()), // e.g. ["E1", "E3"]
-    })
+    }),
   ),
 });
 
@@ -76,7 +76,7 @@ export type ReviewResult = {
 export class PipelineError extends Error {
   constructor(
     message: string,
-    public readonly step: "moderator" | "search" | "fact_checker" | "persist"
+    public readonly step: "moderator" | "search" | "fact_checker" | "persist",
   ) {
     super(message);
     this.name = "PipelineError";

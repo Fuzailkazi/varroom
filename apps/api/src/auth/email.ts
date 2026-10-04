@@ -21,7 +21,7 @@ const sentEmails: Email[] = [];
 // Tests only: returns the newest email sent to this address.
 export function getLastEmail(to: string): Email | undefined {
   const address = to.toLowerCase();
-  let newest: Email | undefined = undefined;
+  let newest: Email | undefined;
   for (const email of sentEmails) {
     if (email.to === address) {
       newest = email;

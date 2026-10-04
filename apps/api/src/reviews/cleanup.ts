@@ -7,7 +7,9 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 
 // deletes the old rows once and logs how many went. it never throws: a failed cleanup
 // just leaves the rows for the next run, it must never stop the api
-export async function cleanUpOldAiCalls(deleteFn: () => Promise<number> = deleteOldAiCalls): Promise<void> {
+export async function cleanUpOldAiCalls(
+  deleteFn: () => Promise<number> = deleteOldAiCalls,
+): Promise<void> {
   try {
     const deleted = await deleteFn();
     console.log(`ai call cleanup: deleted ${deleted} call row(s) older than 48 hours`);

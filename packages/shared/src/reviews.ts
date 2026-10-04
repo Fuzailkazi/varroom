@@ -23,7 +23,11 @@ export type UsageLimits = {
 
 // one limit: the default when unset (or blank), else a positive whole number.
 // anything else throws, so a typo stops the server instead of silently changing the limit
-function readLimit(env: Record<string, string | undefined>, name: string, defaultValue: number): number {
+function readLimit(
+  env: Record<string, string | undefined>,
+  name: string,
+  defaultValue: number,
+): number {
   const raw = env[name];
   if (raw === undefined || raw.trim() === "") {
     return defaultValue;
@@ -104,7 +108,14 @@ export const ReviewClaim = z.object({
     positionA: z.string(),
     positionB: z.string().optional(),
   }),
-  verdict: z.enum(["PENDING", "VERIFIED", "PARTIALLY_TRUE", "REFUTED", "INSUFFICIENT_DATA", "UNTESTABLE"]),
+  verdict: z.enum([
+    "PENDING",
+    "VERIFIED",
+    "PARTIALLY_TRUE",
+    "REFUTED",
+    "INSUFFICIENT_DATA",
+    "UNTESTABLE",
+  ]),
   reasoning: z.string().nullable(),
   confidence: z.number().nullable(),
   citedLabels: z.array(z.string()),

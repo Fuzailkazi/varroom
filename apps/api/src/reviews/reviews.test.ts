@@ -1,14 +1,26 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Server } from "node:http";
-import { prisma } from "@varroom/db/client";
+import type {
+  AgentReply,
+  RunAgentFn,
+  SearchReply,
+  SearchWebFn,
+  TokenUsage,
+  WebSource,
+} from "@varroom/agents";
 import { getBudgetStatus } from "@varroom/db";
-import type { AgentReply, RunAgentFn, SearchReply, SearchWebFn, TokenUsage, WebSource } from "@varroom/agents";
-import { AvailabilityResponse, ErrorResponse, ReviewResponse, StartReviewResponse } from "@varroom/shared";
+import { prisma } from "@varroom/db/client";
+import {
+  AvailabilityResponse,
+  ErrorResponse,
+  ReviewResponse,
+  StartReviewResponse,
+} from "@varroom/shared";
 import { getLastEmail } from "../auth/email.ts";
 import { Fan, newFanDetails } from "../testing/fan.ts";
 import { startTestServer } from "../testing/server.ts";
-import { createReviewRunner, recoverInterruptedReviews } from "./runner.ts";
 import type { StreamMessage } from "./response.ts";
+import { createReviewRunner, recoverInterruptedReviews } from "./runner.ts";
 
 // integration tests for the review api: real endpoints and db (neon test branch),
 // fake agents and fake search so no gemini calls. skipped without DATABASE_URL_TEST
@@ -45,7 +57,14 @@ const moderatorOutput = {
 };
 
 const factCheckerOutput = {
-  verdicts: [{ claimOrder: 1, verdict: "VERIFIED", reasoning: "Both sites agree.", citedLabels: ["E1", "E2"] }],
+  verdicts: [
+    {
+      claimOrder: 1,
+      verdict: "VERIFIED",
+      reasoning: "Both sites agree.",
+      citedLabels: ["E1", "E2"],
+    },
+  ],
 };
 
 // a gate is a promise the test opens when it's ready, to pause the fake agents mid review
@@ -115,7 +134,11 @@ let baseUrl: string;
 beforeAll(async () => {
   if (!hasTestDatabase) return;
   // no wait between retries, so the failing search (a 429) doesn't slow the tests down
-  const started = await startTestServer({ runAgentFn: fakeAgents, searchWebFn: fakeSearch, retryDelayMs: 0 });
+  const started = await startTestServer({
+    runAgentFn: fakeAgents,
+    searchWebFn: fakeSearch,
+    retryDelayMs: 0,
+  });
   server = started.server;
   baseUrl = started.baseUrl;
 });
@@ -180,7 +203,10 @@ async function startAndReadId(fan: Fan, debateId: string): Promise<string> {
 // polls the db until the review reaches a final status, or gives up after a few seconds
 async function waitUntilEnded(reviewId: string): Promise<string> {
   for (let attempt = 0; attempt < 100; attempt++) {
-    const review = await prisma.review.findUnique({ where: { id: reviewId }, select: { status: true } });
+    const review = await prisma.review.findUnique({
+      where: { id: reviewId },
+      select: { status: true },
+    });
     if (review && (review.status === "COMPLETE" || review.status === "FAILED")) {
       return review.status;
     }
@@ -267,7 +293,11 @@ async function errorOf(response: Response) {
 const HOUR_MS = 60 * 60 * 1000;
 
 // saves a review this fan started some hours ago, on a debate of its own. returns the review id
-async function seedReview(userId: string, hoursAgo: number, status: "COMPLETE" | "FAILED" = "COMPLETE") {
+async function seedReview(
+  userId: string,
+  hoursAgo: number,
+  status: "COMPLETE" | "FAILED" = "COMPLETE",
+) {
   const debateId = await insertDebate(userId);
   const createdAt = new Date(Date.now() - hoursAgo * HOUR_MS);
   const review = await prisma.review.create({
@@ -314,7 +344,10 @@ describe.skipIf(!hasTestDatabase)("POST /api/debates/:id/reviews", () => {
     const second = await newFan(baseUrl, true);
     const debateId = await insertDebate(first.userId);
 
-    const responses = await Promise.all([startReview(first.fan, debateId), startReview(second.fan, debateId)]);
+    const responses = await Promise.all([
+      startReview(first.fan, debateId),
+      startReview(second.fan, debateId),
+    ]);
 
     const ids = new Set<string>();
     for (const response of responses) {
@@ -376,11 +409,18 @@ describe.skipIf(!hasTestDatabase)("POST /api/debates/:id/reviews", () => {
         createdAt = twoHoursAgo;
       }
       await prisma.review.create({
-        data: { debateId: otherDebate, status: "COMPLETE", requestedById: userId, createdAt: createdAt },
+        data: {
+          debateId: otherDebate,
+          status: "COMPLETE",
+          requestedById: userId,
+          createdAt: createdAt,
+        },
       });
     }
     const failedDebate = await insertDebate(userId);
-    await prisma.review.create({ data: { debateId: failedDebate, status: "FAILED", requestedById: userId } });
+    await prisma.review.create({
+      data: { debateId: failedDebate, status: "FAILED", requestedById: userId },
+    });
 
     const debateId = await insertDebate(userId);
     const response = await startReview(fan, debateId);
@@ -436,10 +476,15 @@ describe.skipIf(!hasTestDatabase)("POST /api/debates/:id/reviews", () => {
     // 4 counted reviews and a limit of 3: two have to age out before the count drops
     // below 3, so the second oldest decides when a slot frees up
     const before = await errorOf(await startReview(fan, debateId));
-    expect(before.retryAt).toBe(new Date(secondOldest.createdAt.getTime() + 24 * HOUR_MS).toISOString());
+    expect(before.retryAt).toBe(
+      new Date(secondOldest.createdAt.getTime() + 24 * HOUR_MS).toISOString(),
+    );
 
     // once it fails it no longer counts: 3 are left, and now the oldest decides
-    await prisma.review.update({ where: { id: secondOldest.reviewId }, data: { status: "FAILED" } });
+    await prisma.review.update({
+      where: { id: secondOldest.reviewId },
+      data: { status: "FAILED" },
+    });
     const after = await errorOf(await startReview(fan, debateId));
 
     expect(after.code).toBe("REVIEW_LIMIT_REACHED");
@@ -453,7 +498,9 @@ describe.skipIf(!hasTestDatabase)("POST /api/debates/:id/reviews", () => {
     await seedReview(userId, 1);
     // someone else already reviewed this debate
     const debateId = await insertDebate(userId);
-    const existing = await prisma.review.create({ data: { debateId: debateId, status: "COMPLETE" } });
+    const existing = await prisma.review.create({
+      data: { debateId: debateId, status: "COMPLETE" },
+    });
 
     const response = await startReview(fan, debateId);
 
@@ -511,7 +558,11 @@ describe.skipIf(!hasTestDatabase)("GET /api/reviews/:id", () => {
     expect(body.review.failure).toBeNull();
 
     const testable = body.review.claims[0];
-    expect(testable?.entities).toEqual({ player: "Bellingham", positionA: "false 9", positionB: "8" });
+    expect(testable?.entities).toEqual({
+      player: "Bellingham",
+      positionA: "false 9",
+      positionB: "8",
+    });
     expect(testable?.citedLabels).toEqual(["E1", "E2"]);
     expect(body.review.claims[1]?.verdict).toBe("UNTESTABLE");
 
@@ -536,7 +587,10 @@ describe.skipIf(!hasTestDatabase)("GET /api/reviews/:id", () => {
     const response = await fetch(`${baseUrl}/api/reviews/${reviewId}`);
     const json = await response.json();
     const body = ReviewResponse.parse(json);
-    expect(body.review.failure).toEqual({ category: "ai_service", message: "The AI service had a problem." });
+    expect(body.review.failure).toEqual({
+      category: "ai_service",
+      message: "The AI service had a problem.",
+    });
     expect(JSON.stringify(json)).not.toContain("quota");
   });
 
@@ -569,7 +623,9 @@ describe.skipIf(!hasTestDatabase)("GET /api/reviews/:id", () => {
 
     // finding nothing isn't an outage, so the review ends normally
     expect(status).toBe("COMPLETE");
-    const body = ReviewResponse.parse(await (await fetch(`${baseUrl}/api/reviews/${reviewId}`)).json());
+    const body = ReviewResponse.parse(
+      await (await fetch(`${baseUrl}/api/reviews/${reviewId}`)).json(),
+    );
     expect(body.review.evidence.length).toBeGreaterThan(0);
     for (const evidence of body.review.evidence) {
       expect(evidence.status).toBe("no_sources");
@@ -589,7 +645,9 @@ describe.skipIf(!hasTestDatabase)("GET /api/reviews/:id", () => {
 
     // no search ran, so this must not be mistaken for "every search failed"
     expect(status).toBe("COMPLETE");
-    const body = ReviewResponse.parse(await (await fetch(`${baseUrl}/api/reviews/${reviewId}`)).json());
+    const body = ReviewResponse.parse(
+      await (await fetch(`${baseUrl}/api/reviews/${reviewId}`)).json(),
+    );
     expect(body.review.decision).toBe("INCONCLUSIVE");
     expect(body.review.credibilityScore).toBeNull();
     expect(body.review.summary).toBe("1 claim: 1 not testable");
@@ -691,7 +749,9 @@ describe.skipIf(!hasTestDatabase)("GET /api/reviews/:id/events", () => {
     expect(eventNames(messages)).toEqual(["claims_extracted", "review_failed"]);
     expect(messages[1]?.data.failure.category).toBe("ai_service");
 
-    const counted = await prisma.review.count({ where: { requestedById: userId, status: { not: "FAILED" } } });
+    const counted = await prisma.review.count({
+      where: { requestedById: userId, status: { not: "FAILED" } },
+    });
     expect(counted).toBe(0);
   });
 
@@ -751,13 +811,20 @@ describe.skipIf(!hasTestDatabase)("GET /api/reviews/:id/events", () => {
     const { userId } = await newFan(baseUrl, true);
     const debateId = await insertDebate(userId);
     const failed = await prisma.review.create({
-      data: { debateId: debateId, status: "FAILED", failureReason: "fact_checker: Gemini error 500: boom" },
+      data: {
+        debateId: debateId,
+        status: "FAILED",
+        failureReason: "fact_checker: Gemini error 500: boom",
+      },
     });
 
     const messages = await readSse(await openStream(failed.id));
 
     expect(eventNames(messages)).toEqual(["review_failed"]);
-    expect(messages[0]?.data.failure).toEqual({ category: "ai_service", message: "The AI service had a problem." });
+    expect(messages[0]?.data.failure).toEqual({
+      category: "ai_service",
+      message: "The AI service had a problem.",
+    });
     expect(JSON.stringify(messages)).not.toContain("boom");
   });
 
@@ -803,7 +870,10 @@ describe.skipIf(!hasTestDatabase)("timeouts and restarts", () => {
       // let the stuck agent finish; its result must not overwrite the timeout
       stuck.open();
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const review = await prisma.review.findUniqueOrThrow({ where: { id: reviewId }, include: { claims: true } });
+      const review = await prisma.review.findUniqueOrThrow({
+        where: { id: reviewId },
+        include: { claims: true },
+      });
       expect(review.status).toBe("FAILED");
       expect(review.failureReason).toStartWith("timeout:");
       expect(review.claims).toHaveLength(0);
@@ -812,14 +882,18 @@ describe.skipIf(!hasTestDatabase)("timeouts and restarts", () => {
       // review holds no daily budget, so no search or fact checker call may start
       let moderatorCalls = 0;
       for (let tries = 0; tries < 50 && moderatorCalls === 0; tries++) {
-        moderatorCalls = await prisma.aiCall.count({ where: { reviewId: reviewId, step: "MODERATOR" } });
+        moderatorCalls = await prisma.aiCall.count({
+          where: { reviewId: reviewId, step: "MODERATOR" },
+        });
         if (moderatorCalls === 0) {
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
       expect(moderatorCalls).toBe(1);
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const laterCalls = await prisma.aiCall.count({ where: { reviewId: reviewId, step: { not: "MODERATOR" } } });
+      const laterCalls = await prisma.aiCall.count({
+        where: { reviewId: reviewId, step: { not: "MODERATOR" } },
+      });
       expect(laterCalls).toBe(0);
     } finally {
       quick.server.close();
@@ -830,7 +904,9 @@ describe.skipIf(!hasTestDatabase)("timeouts and restarts", () => {
     const { userId } = await newFan(baseUrl, true);
     const debateId = await insertDebate(userId);
     const running = await prisma.review.create({ data: { debateId: debateId, status: "RUNNING" } });
-    await prisma.reviewEvent.create({ data: { reviewId: running.id, seq: 1, type: "claims_extracted", payload: {} } });
+    await prisma.reviewEvent.create({
+      data: { reviewId: running.id, seq: 1, type: "claims_extracted", payload: {} },
+    });
 
     await recoverInterruptedReviews();
 
@@ -854,7 +930,11 @@ describe.skipIf(!hasTestDatabase)("runner crashes", () => {
     const queued = await prisma.review.create({ data: { debateId: debateId, status: "QUEUED" } });
 
     // a debate id that isn't a uuid makes loading the debate text throw, before the pipeline
-    const runner = createReviewRunner({ runAgentFn: fakeAgents, searchWebFn: fakeSearch, retryDelayMs: 0 });
+    const runner = createReviewRunner({
+      runAgentFn: fakeAgents,
+      searchWebFn: fakeSearch,
+      retryDelayMs: 0,
+    });
     const received: StreamMessage[] = [];
     const finalEvent = new Promise<void>((resolve) => {
       runner.subscribe(queued.id, (message) => {
@@ -887,7 +967,10 @@ describe.skipIf(!hasTestDatabase)("ai call recording", () => {
     const reviewId = await startAndReadId(fan, debateId);
     await waitUntilEnded(reviewId);
 
-    const calls = await prisma.aiCall.findMany({ where: { reviewId: reviewId }, orderBy: { id: "asc" } });
+    const calls = await prisma.aiCall.findMany({
+      where: { reviewId: reviewId },
+      orderBy: { id: "asc" },
+    });
     const steps: string[] = [];
     for (const call of calls) {
       steps.push(call.step);
@@ -1023,7 +1106,10 @@ describe.skipIf(!hasTestDatabase)("daily gemini budget", () => {
       const debateB = await insertDebate(second.userId);
       control.moderatorGate = makeGate();
 
-      const responses = await Promise.all([startReview(first.fan, debateA), startReview(second.fan, debateB)]);
+      const responses = await Promise.all([
+        startReview(first.fan, debateA),
+        startReview(second.fan, debateB),
+      ]);
 
       const statuses = [responses[0].status, responses[1].status].sort();
       expect(statuses).toEqual([202, 503]);
@@ -1046,7 +1132,9 @@ describe.skipIf(!hasTestDatabase)("daily gemini budget", () => {
     try {
       const { fan, userId } = await newFan(quick.baseUrl, true);
       const debateId = await insertDebate(userId);
-      const existing = await prisma.review.create({ data: { debateId: debateId, status: "COMPLETE" } });
+      const existing = await prisma.review.create({
+        data: { debateId: debateId, status: "COMPLETE" },
+      });
 
       const response = await startReview(fan, debateId);
 
@@ -1144,8 +1232,15 @@ describe.skipIf(!hasTestDatabase)("daily gemini budget", () => {
 
       // the budget never stopped it: it completed and made all 3 of its calls
       expect(status).toBe("COMPLETE");
-      const calls = await prisma.aiCall.findMany({ where: { reviewId: reviewId }, select: { step: true, status: true } });
-      expect(calls.map((call) => call.step).sort()).toEqual(["FACT_CHECKER", "MODERATOR", "SEARCH"]);
+      const calls = await prisma.aiCall.findMany({
+        where: { reviewId: reviewId },
+        select: { step: true, status: true },
+      });
+      expect(calls.map((call) => call.step).sort()).toEqual([
+        "FACT_CHECKER",
+        "MODERATOR",
+        "SEARCH",
+      ]);
       expect(calls.every((call) => call.status === "OK")).toBe(true);
     } finally {
       quick.server.close();

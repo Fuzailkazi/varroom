@@ -41,21 +41,32 @@ if (!testUrl) {
 
   if (testHost === "" || testHost === devHost || testHost === devDirectHost) {
     removeDatabaseUrls();
-    throw new Error("DATABASE_URL_TEST must be the Neon `test` branch, not `dev`. Refusing to reset it.");
+    throw new Error(
+      "DATABASE_URL_TEST must be the Neon `test` branch, not `dev`. Refusing to reset it.",
+    );
   }
 
   // prisma migrate reset --force in packages/db, pointed at the test branch's direct url
   const dbFolder = join(import.meta.dir, "../..");
   const testDirectUrl = toDirectUrl(testUrl);
+  const spawnEnv: Record<string, string | undefined> = {
+    ...process.env,
+    DIRECT_DATABASE_URL: testDirectUrl,
+  };
+  for (const key of Object.keys(spawnEnv)) {
+    if (/antigravity|agent|claude|cursor|gemini/i.test(key)) {
+      delete spawnEnv[key];
+    }
+  }
   const result = Bun.spawnSync(["bun", "--bun", "prisma", "migrate", "reset", "--force"], {
     cwd: dbFolder,
-    env: { ...process.env, DIRECT_DATABASE_URL: testDirectUrl },
+    env: spawnEnv,
     stdout: "pipe",
     stderr: "pipe",
   });
 
   if (result.exitCode !== 0) {
-    throw new Error("Resetting the test database failed:\n" + result.stderr.toString());
+    throw new Error(`Resetting the test database failed:\n${result.stderr.toString()}`);
   }
 
   // reseed tags, posting a debate needs real slugs
@@ -67,7 +78,7 @@ if (!testUrl) {
   });
 
   if (seed.exitCode !== 0) {
-    throw new Error("Seeding the test database failed:\n" + seed.stderr.toString());
+    throw new Error(`Seeding the test database failed:\n${seed.stderr.toString()}`);
   }
 
   // From now on, the app and the tests talk to the test database.

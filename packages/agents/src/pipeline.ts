@@ -1,7 +1,10 @@
-import { LlmAgent, InMemoryRunner, isFinalResponse, stringifyContent } from "@google/adk";
 import type { Event } from "@google/adk";
+import { InMemoryRunner, isFinalResponse, LlmAgent, stringifyContent } from "@google/adk";
 import { MAX_SEARCHED_CLAIMS } from "@varroom/shared";
-import { ModeratorOutput, FactCheckerOutput, PipelineError, ReviewStoppedError, geminiModel } from "./types.ts";
+import type { EvidenceRecord } from "./citations.ts";
+import { validateCitations } from "./citations.ts";
+import { computeDecision, computeScore } from "./score.ts";
+import { searchWeb as realSearchWeb } from "./search.ts";
 import type {
   AgentReply,
   AiCallRecord,
@@ -13,10 +16,13 @@ import type {
   TokenUsage,
   WebSource,
 } from "./types.ts";
-import { validateCitations } from "./citations.ts";
-import type { EvidenceRecord } from "./citations.ts";
-import { computeScore, computeDecision } from "./score.ts";
-import { searchWeb as realSearchWeb } from "./search.ts";
+import {
+  FactCheckerOutput,
+  geminiModel,
+  ModeratorOutput,
+  PipelineError,
+  ReviewStoppedError,
+} from "./types.ts";
 import { toTokenUsage } from "./usage.ts";
 
 // An evidence entry built by code during the search loop, never by the model.
@@ -40,7 +46,11 @@ export type SearchWebFn = (query: string) => Promise<SearchReply>;
 // making real Gemini calls. sessionId is the review id when there is one:
 // ADK puts it on its tracing spans, so one review's spans group together.
 // Fakes can leave it out.
-export type RunAgentFn = (agent: LlmAgent, input: string, sessionId?: string) => Promise<AgentReply>;
+export type RunAgentFn = (
+  agent: LlmAgent,
+  input: string,
+  sessionId?: string,
+) => Promise<AgentReply>;
 
 // told about every gemini attempt once it ends. runReview saves each one as an ai_calls row
 export type AiCallFn = (record: AiCallRecord) => Promise<void>;
@@ -128,7 +138,11 @@ function buildSearchQuery(claim: Claim): string {
 // the session id onto its tracing spans. With no id, ADK makes one up.
 // The runner is new for every attempt, so the id is never already taken,
 // and the in memory session goes away with the runner.
-async function defaultRunAgent(agent: LlmAgent, input: string, sessionId?: string): Promise<AgentReply> {
+async function defaultRunAgent(
+  agent: LlmAgent,
+  input: string,
+  sessionId?: string,
+): Promise<AgentReply> {
   const runner = new InMemoryRunner({ agent, appName: "varroom" });
   const session = await runner.sessionService.createSession({
     appName: "varroom",
@@ -228,12 +242,12 @@ export async function runAttempts<T extends { usage: TokenUsage | null }>(
   step: AiCallRecord["step"],
   maxAttempts: number,
   attemptFn: () => Promise<T>,
-  context: AttemptContext
+  context: AttemptContext,
 ): Promise<T> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     // the review ended (e.g. timed out): start nothing new. an attempt already
     // running is still reported when it ends, but no retry follows it
-    if (context.shouldStop && context.shouldStop()) {
+    if (context.shouldStop?.()) {
       throw new ReviewStoppedError();
     }
 
@@ -317,7 +331,7 @@ export async function runPipeline(
     retryDelayMs = DEFAULT_RETRY_DELAY_MS,
     reviewId,
     shouldStop,
-  }: PipelineOptions = {}
+  }: PipelineOptions = {},
 ): Promise<PipelineOutput> {
   const model = geminiModel();
 
@@ -353,7 +367,7 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
       "MODERATOR",
       AGENT_MAX_ATTEMPTS,
       () => runAgentFn(moderator, text, reviewId),
-      agentContext
+      agentContext,
     );
     const parsed = ModeratorOutput.parse(JSON.parse(reply.text));
     parsedClaims = parsed.claims;
@@ -364,7 +378,7 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
     }
     throw new PipelineError(
       `Moderator failed: ${err instanceof Error ? err.message : String(err)}`,
-      "moderator"
+      "moderator",
     );
   }
 
@@ -393,7 +407,12 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
 
     const searchContext: AttemptContext = { ...agentContext, claimOrder: claim.order };
     try {
-      const reply = await runAttempts("SEARCH", SEARCH_MAX_ATTEMPTS, () => searchWebFn(query), searchContext);
+      const reply = await runAttempts(
+        "SEARCH",
+        SEARCH_MAX_ATTEMPTS,
+        () => searchWebFn(query),
+        searchContext,
+      );
       sources = reply.sources;
     } catch (err) {
       // the review ended: stop the whole pipeline, don't save it as a failed search
@@ -449,7 +468,7 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
 
   // fact checker: only sees claims that have usable evidence
   const testableClaims = parsedClaims.filter(
-    (c) => c.type === "POSITIONAL_ROLE" && claimsWithEvidence.has(c.order)
+    (c) => c.type === "POSITIONAL_ROLE" && claimsWithEvidence.has(c.order),
   );
 
   let verdicts: FactCheckerOutput["verdicts"] = [];
@@ -460,7 +479,10 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
       .join("\n");
 
     const evidenceContext = usableEvidence
-      .map((e) => `${e.label} (for claim ${e.args.claimOrder}): ${e.sourceTitle ?? "untitled"} — ${e.sourceUrl}`)
+      .map(
+        (e) =>
+          `${e.label} (for claim ${e.args.claimOrder}): ${e.sourceTitle ?? "untitled"} — ${e.sourceUrl}`,
+      )
       .join("\n");
 
     const factChecker = new LlmAgent({
@@ -479,7 +501,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
         "FACT_CHECKER",
         AGENT_MAX_ATTEMPTS,
         () => runAgentFn(factChecker, factCheckerInput, reviewId),
-        agentContext
+        agentContext,
       );
       const parsed = FactCheckerOutput.parse(JSON.parse(reply.text));
       verdicts = parsed.verdicts;
@@ -489,7 +511,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
       }
       throw new PipelineError(
         `Fact Checker failed: ${err instanceof Error ? err.message : String(err)}`,
-        "fact_checker"
+        "fact_checker",
       );
     }
   }
@@ -583,7 +605,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
     // Confidence: number of distinct hostnames among cited, usable rows.
     // Two or more independent sources → 0.8; one → 0.4.
     const citedUsable = usableEvidence.filter(
-      (e) => citationCheck.validLabels.includes(e.label) && e.args.claimOrder === claim.order
+      (e) => citationCheck.validLabels.includes(e.label) && e.args.claimOrder === claim.order,
     );
     const distinctHosts = new Set(citedUsable.map(sourceSite));
     const confidence = citedUsable.length === 0 ? null : distinctHosts.size >= 2 ? 0.8 : 0.4;

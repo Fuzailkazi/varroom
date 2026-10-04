@@ -92,7 +92,9 @@ describe("formatTrace", () => {
   test("prints one numbered line per call, in the order given", () => {
     const text = formatTrace(trace({}));
 
-    const moderatorAt = text.indexOf("1. MODERATOR attempt 1, OK, tokens in 100 / out 20 / thinking 5, 850ms");
+    const moderatorAt = text.indexOf(
+      "1. MODERATOR attempt 1, OK, tokens in 100 / out 20 / thinking 5, 850ms",
+    );
     const failedAt = text.indexOf("2. SEARCH attempt 1 (claim 1), ERROR");
     const retryAt = text.indexOf("3. SEARCH attempt 2 (claim 1), OK");
 
@@ -124,7 +126,9 @@ describe("formatTrace", () => {
   });
 
   test("a review that failed before it ever started says so instead of a duration", () => {
-    const text = formatTrace(trace({ status: "FAILED", startedAt: null, calls: [], aiCallCount: 0 }));
+    const text = formatTrace(
+      trace({ status: "FAILED", startedAt: null, calls: [], aiCallCount: 0 }),
+    );
 
     expect(text).toContain("Duration: never started");
   });
@@ -149,11 +153,15 @@ describe("formatTrace", () => {
 
 describe("formatResetTime", () => {
   test("shows utc first, then pacific time", () => {
-    expect(formatResetTime(new Date("2026-09-29T07:00:00Z"))).toBe("2026-09-29 07:00 UTC (Sep 29, 12:00 AM PDT)");
+    expect(formatResetTime(new Date("2026-09-29T07:00:00Z"))).toBe(
+      "2026-09-29 07:00 UTC (Sep 29, 12:00 AM PDT)",
+    );
   });
 
   test("uses standard time in winter, when pacific midnight is 08:00 utc", () => {
-    expect(formatResetTime(new Date("2026-12-02T08:00:00Z"))).toBe("2026-12-02 08:00 UTC (Dec 2, 12:00 AM PST)");
+    expect(formatResetTime(new Date("2026-12-02T08:00:00Z"))).toBe(
+      "2026-12-02 08:00 UTC (Dec 2, 12:00 AM PST)",
+    );
   });
 });
 

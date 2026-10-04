@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import type { StartReviewInput } from "./budget.ts";
+import { getBudgetStatus, startReviewLocked } from "./budget.ts";
 import { prisma } from "./client.ts";
 import { createDebate } from "./debates.ts";
-import { getBudgetStatus, startReviewLocked } from "./budget.ts";
-import type { StartReviewInput } from "./budget.ts";
 
 // integration tests for the daily gemini budget and the locked review start, on the
 // neon test branch. only run when the root test preload pointed DATABASE_URL at it.
@@ -78,7 +78,11 @@ async function seedReview(options: {
 }
 
 // saves `count` finished gemini attempts, for a review or for none
-async function seedCalls(count: number, reviewId: string | null, startedAt: Date = new Date()): Promise<void> {
+async function seedCalls(
+  count: number,
+  reviewId: string | null,
+  startedAt: Date = new Date(),
+): Promise<void> {
   for (let index = 0; index < count; index++) {
     await prisma.aiCall.create({
       data: {
@@ -365,7 +369,11 @@ describe.skipIf(!onTestDatabase)("startReviewLocked", () => {
 
   test("the fan cap refuses a fan's 4th review in 24h and says when a slot frees up", async () => {
     const fan = await prisma.user.create({
-      data: { id: `budget-fan-${crypto.randomUUID()}`, email: `budget-fan-${crypto.randomUUID()}@varroom.test`, name: "Fan" },
+      data: {
+        id: `budget-fan-${crypto.randomUUID()}`,
+        email: `budget-fan-${crypto.randomUUID()}@varroom.test`,
+        name: "Fan",
+      },
     });
     // 3 counted reviews (the oldest 2 hours ago), plus a failed one that doesn't count
     await seedReview({ status: "COMPLETE", minutesAgo: 120, requestedById: fan.id });
@@ -382,14 +390,20 @@ describe.skipIf(!onTestDatabase)("startReviewLocked", () => {
 
     expect(result.outcome).toBe("fan_cap");
     if (result.outcome !== "fan_cap") return;
-    expect(result.retryAt.toISOString()).toBe(new Date(oldest.createdAt.getTime() + 24 * HOUR_MS).toISOString());
+    expect(result.retryAt.toISOString()).toBe(
+      new Date(oldest.createdAt.getTime() + 24 * HOUR_MS).toISOString(),
+    );
     const count = await prisma.review.count({ where: { debateId: input.debateId } });
     expect(count).toBe(0);
   });
 
   test("a fan over the cap (the limit was lowered) is told when enough reviews have aged out", async () => {
     const fan = await prisma.user.create({
-      data: { id: `budget-over-${crypto.randomUUID()}`, email: `budget-over-${crypto.randomUUID()}@varroom.test`, name: "Fan" },
+      data: {
+        id: `budget-over-${crypto.randomUUID()}`,
+        email: `budget-over-${crypto.randomUUID()}@varroom.test`,
+        name: "Fan",
+      },
     });
     // 5 counted reviews, but the limit is now 3: the 3rd oldest has to age out
     // before only 2 are left and the fan has a slot again
@@ -402,22 +416,32 @@ describe.skipIf(!onTestDatabase)("startReviewLocked", () => {
     });
     const thirdOldest = counted[2]!;
 
-    const result = await startReviewLocked(await startInput({ requestedById: fan.id, fanDailyLimit: 3 }));
+    const result = await startReviewLocked(
+      await startInput({ requestedById: fan.id, fanDailyLimit: 3 }),
+    );
 
     expect(result.outcome).toBe("fan_cap");
     if (result.outcome !== "fan_cap") return;
-    expect(result.retryAt.toISOString()).toBe(new Date(thirdOldest.createdAt.getTime() + 24 * HOUR_MS).toISOString());
+    expect(result.retryAt.toISOString()).toBe(
+      new Date(thirdOldest.createdAt.getTime() + 24 * HOUR_MS).toISOString(),
+    );
   });
 
   test("the fan cap is skipped when no fan limit is given (admins and the cli)", async () => {
     const fan = await prisma.user.create({
-      data: { id: `budget-admin-${crypto.randomUUID()}`, email: `budget-admin-${crypto.randomUUID()}@varroom.test`, name: "Admin" },
+      data: {
+        id: `budget-admin-${crypto.randomUUID()}`,
+        email: `budget-admin-${crypto.randomUUID()}@varroom.test`,
+        name: "Admin",
+      },
     });
     await seedReview({ status: "COMPLETE", minutesAgo: 30, requestedById: fan.id });
     await seedReview({ status: "COMPLETE", minutesAgo: 20, requestedById: fan.id });
     await seedReview({ status: "COMPLETE", minutesAgo: 10, requestedById: fan.id });
 
-    const result = await startReviewLocked(await startInput({ requestedById: fan.id, fanDailyLimit: null }));
+    const result = await startReviewLocked(
+      await startInput({ requestedById: fan.id, fanDailyLimit: null }),
+    );
 
     expect(result.outcome).toBe("created");
     if (result.outcome === "created") liveReviewIds.push(result.review.id);
@@ -426,14 +450,20 @@ describe.skipIf(!onTestDatabase)("startReviewLocked", () => {
   test("skipping the fan cap never skips the budget", async () => {
     const limit = (await limitWithRoomFor(1)) - 1;
 
-    const result = await startReviewLocked(await startInput({ fanDailyLimit: null, aiDailyCallLimit: limit }));
+    const result = await startReviewLocked(
+      await startInput({ fanDailyLimit: null, aiDailyCallLimit: limit }),
+    );
 
     expect(result.outcome).toBe("budget");
   });
 
   test("a fan at the cap is told about the cap first, even when the budget is out too", async () => {
     const fan = await prisma.user.create({
-      data: { id: `budget-both-${crypto.randomUUID()}`, email: `budget-both-${crypto.randomUUID()}@varroom.test`, name: "Fan" },
+      data: {
+        id: `budget-both-${crypto.randomUUID()}`,
+        email: `budget-both-${crypto.randomUUID()}@varroom.test`,
+        name: "Fan",
+      },
     });
     await seedReview({ status: "COMPLETE", minutesAgo: 30, requestedById: fan.id });
     const limit = (await limitWithRoomFor(1)) - 1;

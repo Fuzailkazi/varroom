@@ -57,7 +57,10 @@ describe("requireTrustedOrigin", () => {
   });
 
   test("lets a JSON POST from our own site through", () => {
-    const sent = run("POST", { origin: "http://localhost:3000", "content-type": "application/json; charset=utf-8" });
+    const sent = run("POST", {
+      origin: "http://localhost:3000",
+      "content-type": "application/json; charset=utf-8",
+    });
     expect(sent.nextCalled).toBe(true);
   });
 
@@ -69,11 +72,17 @@ describe("requireTrustedOrigin", () => {
   });
 
   test("refuses a POST from another website, even a lookalike", () => {
-    const evil = run("POST", { origin: "https://evil.example", "content-type": "application/json" });
+    const evil = run("POST", {
+      origin: "https://evil.example",
+      "content-type": "application/json",
+    });
     expect(evil.status).toBe(403);
     expect(evil.code).toBe("BAD_ORIGIN");
 
-    const lookalike = run("POST", { origin: "http://localhost:3000.evil.example", "content-type": "application/json" });
+    const lookalike = run("POST", {
+      origin: "http://localhost:3000.evil.example",
+      "content-type": "application/json",
+    });
     expect(lookalike.status).toBe(403);
   });
 

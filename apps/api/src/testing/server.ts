@@ -1,5 +1,5 @@
-import { createServer } from "node:http";
 import type { Server } from "node:http";
+import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createApp } from "../app.ts";
 import { loadEnv } from "../env.ts";

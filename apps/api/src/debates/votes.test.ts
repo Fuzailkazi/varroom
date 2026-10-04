@@ -71,7 +71,13 @@ async function errorOf(response: Response) {
   return ErrorResponse.parse(await response.json()).error;
 }
 
-async function rawRequest(fan: Fan, method: string, path: string, headers: Record<string, string>, body?: string) {
+async function rawRequest(
+  fan: Fan,
+  method: string,
+  path: string,
+  headers: Record<string, string>,
+  body?: string,
+) {
   const allHeaders: Record<string, string> = { ...headers, Cookie: fan.cookieHeader() };
   return fetch(baseUrl + path, { method: method, headers: allHeaders, body: body });
 }
@@ -156,7 +162,10 @@ describe.skipIf(!hasTestDatabase)("PUT /api/debates/:id/vote", () => {
 
     for (const value of [0, 2, "up", undefined]) {
       const body: Record<string, unknown> = value === undefined ? {} : { value: value };
-      const response = await fan.call(`/api/debates/${debateId}/vote`, { method: "PUT", body: body });
+      const response = await fan.call(`/api/debates/${debateId}/vote`, {
+        method: "PUT",
+        body: body,
+      });
       expect(response.status).toBe(400);
       const error = await errorOf(response);
       expect(error.code).toBe("VALIDATION_FAILED");
@@ -200,14 +209,32 @@ describe.skipIf(!hasTestDatabase)("PUT /api/debates/:id/vote", () => {
     const evilOrigin = { Origin: "https://evil.example", "Content-Type": "application/json" };
     const goodOrigin = { Origin: baseUrl, "Content-Type": "application/json" };
 
-    const badOrigin = await rawRequest(fan, "PUT", `/api/debates/${crypto.randomUUID()}/vote`, evilOrigin, JSON.stringify({ value: 0 }));
+    const badOrigin = await rawRequest(
+      fan,
+      "PUT",
+      `/api/debates/${crypto.randomUUID()}/vote`,
+      evilOrigin,
+      JSON.stringify({ value: 0 }),
+    );
     expect(badOrigin.status).toBe(403);
     expect((await errorOf(badOrigin)).code).toBe("BAD_ORIGIN");
 
-    const malformedId = await rawRequest(fan, "PUT", "/api/debates/not-a-uuid/vote", goodOrigin, JSON.stringify({ value: 0 }));
+    const malformedId = await rawRequest(
+      fan,
+      "PUT",
+      "/api/debates/not-a-uuid/vote",
+      goodOrigin,
+      JSON.stringify({ value: 0 }),
+    );
     expect(malformedId.status).toBe(404);
 
-    const missingDebate = await rawRequest(fan, "PUT", `/api/debates/${crypto.randomUUID()}/vote`, goodOrigin, JSON.stringify({ value: 0 }));
+    const missingDebate = await rawRequest(
+      fan,
+      "PUT",
+      `/api/debates/${crypto.randomUUID()}/vote`,
+      goodOrigin,
+      JSON.stringify({ value: 0 }),
+    );
     expect(missingDebate.status).toBe(400);
     expect((await errorOf(missingDebate)).code).toBe("VALIDATION_FAILED");
   });
@@ -227,7 +254,11 @@ describe.skipIf(!hasTestDatabase)("PUT /api/debates/:id/vote", () => {
 
   test("sort=top orders by the new vote_score, and an anonymous list shows myVote null", async () => {
     const { userId } = await newFan(true);
-    const [highId, midId, lowId] = await Promise.all([insertDebate(userId), insertDebate(userId), insertDebate(userId)]);
+    const [highId, midId, lowId] = await Promise.all([
+      insertDebate(userId),
+      insertDebate(userId),
+      insertDebate(userId),
+    ]);
 
     const upvoters = await Promise.all([newFan(true), newFan(true)]);
     await vote(upvoters[0]!.fan, highId!, 1);
@@ -236,7 +267,10 @@ describe.skipIf(!hasTestDatabase)("PUT /api/debates/:id/vote", () => {
     await vote(downvoter.fan, lowId!, -1);
 
     const stranger = new Fan(baseUrl);
-    const author = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { username: true } });
+    const author = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { username: true },
+    });
     const response = await stranger.call(`/api/debates?sort=top&author=${author.username}`);
     expect(response.status).toBe(200);
     const body = ListDebatesResponse.parse(await response.json());

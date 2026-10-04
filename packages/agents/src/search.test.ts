@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 // searchWeb talks to Gemini, which is a network boundary, so the SDK is
 // replaced with a fake that returns whatever grounding chunks a test sets.
 let fakeChunks: unknown[] = [];
-let fakeUsage: unknown = undefined;
+let fakeUsage: unknown;
 let lastRequest: { model?: string; config?: unknown } = {};
 
 mock.module("@google/genai", () => ({
@@ -72,7 +72,11 @@ describe("searchWeb", () => {
   });
 
   test("skips chunks that have no web url", async () => {
-    fakeChunks = [{ web: { title: "no url" } }, {}, { web: { uri: "https://a.com", title: "a.com" } }];
+    fakeChunks = [
+      { web: { title: "no url" } },
+      {},
+      { web: { uri: "https://a.com", title: "a.com" } },
+    ];
 
     const { sources } = await searchWeb("query");
 

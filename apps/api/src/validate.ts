@@ -1,6 +1,6 @@
+import type { FieldError } from "@varroom/shared";
 import type { Response } from "express";
 import type { z } from "zod";
-import type { FieldError } from "@varroom/shared";
 import { sendError } from "./errors.ts";
 
 // parses body/query with a zod schema. returns the clean data, or sends

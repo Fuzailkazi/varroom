@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Server } from "node:http";
-import { prisma } from "@varroom/db/client";
-import { recordAiCall } from "@varroom/db";
 import type { NewAiCall } from "@varroom/db";
+import { recordAiCall } from "@varroom/db";
+import { prisma } from "@varroom/db/client";
 import { AdminReviewTraceResponse, ErrorResponse } from "@varroom/shared";
 import { getLastEmail } from "../auth/email.ts";
 import { Fan, newFanDetails } from "../testing/fan.ts";
@@ -109,7 +109,10 @@ describe.skipIf(!hasTestDatabase)("GET /api/admin/reviews/:id/trace", () => {
   test("an admin gets the review's totals and every call in time order, raw errors included", async () => {
     const { fan, userId } = await newAdmin();
     const { debateId, reviewId } = await newReview(userId);
-    await recordAiCall(reviewId, call({ step: "MODERATOR", startedAt: new Date("2026-09-28T10:00:01Z") }));
+    await recordAiCall(
+      reviewId,
+      call({ step: "MODERATOR", startedAt: new Date("2026-09-28T10:00:01Z") }),
+    );
     await recordAiCall(
       reviewId,
       call({
@@ -124,7 +127,12 @@ describe.skipIf(!hasTestDatabase)("GET /api/admin/reviews/:id/trace", () => {
     );
     await recordAiCall(
       reviewId,
-      call({ step: "SEARCH", attempt: 2, claimOrder: 1, startedAt: new Date("2026-09-28T10:00:05Z") }),
+      call({
+        step: "SEARCH",
+        attempt: 2,
+        claimOrder: 1,
+        startedAt: new Date("2026-09-28T10:00:05Z"),
+      }),
     );
 
     const response = await getTrace(fan, reviewId);

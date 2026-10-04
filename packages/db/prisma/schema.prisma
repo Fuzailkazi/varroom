@@ -64,6 +64,7 @@ model Player {
   debates     Debate[]
 
   @@index([name])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "players_name_trgm_idx")
   @@map("players")
 }
 

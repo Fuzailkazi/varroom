@@ -121,7 +121,13 @@ async function insertDebates(authorId: string, count: number): Promise<string[]>
 }
 
 // raw fetch with full header control, for origin/content type tests
-async function rawRequest(fan: Fan, method: string, path: string, headers: Record<string, string>, body?: string) {
+async function rawRequest(
+  fan: Fan,
+  method: string,
+  path: string,
+  headers: Record<string, string>,
+  body?: string,
+) {
   const allHeaders: Record<string, string> = { ...headers, Cookie: fan.cookieHeader() };
   return fetch(baseUrl + path, { method: method, headers: allHeaders, body: body });
 }
@@ -143,7 +149,9 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
       const posted = Debate.parse(await response.json());
 
       expect(posted.title).toBe("Arsenal should sign a striker"); // trimmed, line break gone
-      expect(posted.thesis).toBe("They create plenty of chances but finish too few of them every season.");
+      expect(posted.thesis).toBe(
+        "They create plenty of chances but finish too few of them every season.",
+      );
       expect(posted.categories).toEqual(["TRANSFER", "TACTICAL"]);
       // leagues first, then teams
       expect(posted.tags).toEqual([
@@ -175,13 +183,25 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
       const [id] = await insertDebates(userId, 1);
 
       await prisma.review.create({
-        data: { debateId: id!, status: "COMPLETE", decision: "CONFIRMED", credibilityScore: 74, summary: "Holds up.", completedAt: new Date() },
+        data: {
+          debateId: id!,
+          status: "COMPLETE",
+          decision: "CONFIRMED",
+          credibilityScore: 74,
+          summary: "Holds up.",
+          completedAt: new Date(),
+        },
       });
       await prisma.debate.update({ where: { id: id! }, data: { authorId: null } });
 
       const response = await fan.call(`/api/debates/${id}`);
       const debate = Debate.parse(await response.json());
-      expect(debate.author).toEqual({ username: null, displayUsername: null, displayName: "deleted user", badge: null });
+      expect(debate.author).toEqual({
+        username: null,
+        displayUsername: null,
+        displayName: "deleted user",
+        badge: null,
+      });
       expect(debate.latestReview?.status).toBe("COMPLETE");
       expect(debate.latestReview?.decision).toBe("CONFIRMED");
       expect(debate.latestReview?.credibilityScore).toBe(74);
@@ -202,17 +222,39 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
     // bad body + the field path the error should point at
     const cases: { name: string; body: Record<string, unknown>; path: string }[] = [
       { name: "a 9 character title", body: debateBody({ title: "Too short" }), path: "title" },
-      { name: "a thesis of only spaces", body: debateBody({ thesis: "                                        " }), path: "thesis" },
-      { name: "5 categories", body: debateBody({ categories: ["TACTICAL", "TRANSFER", "PLAYER", "OTHER", "FUN"] }), path: "categories" },
+      {
+        name: "a thesis of only spaces",
+        body: debateBody({ thesis: "                                        " }),
+        path: "thesis",
+      },
+      {
+        name: "5 categories",
+        body: debateBody({ categories: ["TACTICAL", "TRANSFER", "PLAYER", "OTHER", "FUN"] }),
+        path: "categories",
+      },
       { name: "no categories", body: debateBody({ categories: [] }), path: "categories" },
-      { name: "an unknown category", body: debateBody({ categories: ["GOSSIP"] }), path: "categories.0" },
+      {
+        name: "an unknown category",
+        body: debateBody({ categories: ["GOSSIP"] }),
+        path: "categories.0",
+      },
       {
         name: "6 tags",
-        body: debateBody({ tags: ["arsenal", "chelsea", "liverpool", "everton", "fulham", "brentford"] }),
+        body: debateBody({
+          tags: ["arsenal", "chelsea", "liverpool", "everton", "fulham", "brentford"],
+        }),
         path: "tags",
       },
-      { name: "an unknown tag slug", body: debateBody({ tags: ["arsenal", "not-a-club"] }), path: "tags.1" },
-      { name: "a missing title", body: { thesis: "A thesis long enough to pass the rule.", categories: ["OTHER"] }, path: "title" },
+      {
+        name: "an unknown tag slug",
+        body: debateBody({ tags: ["arsenal", "not-a-club"] }),
+        path: "tags.1",
+      },
+      {
+        name: "a missing title",
+        body: { thesis: "A thesis long enough to pass the rule.", categories: ["OTHER"] },
+        path: "title",
+      },
     ];
 
     for (const testCase of cases) {
@@ -267,7 +309,13 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
       const { fan } = await newFan(true);
       const evil = { Origin: "https://evil.example", "Content-Type": "application/json" };
 
-      const valid = await rawRequest(fan, "POST", "/api/debates", evil, JSON.stringify(debateBody()));
+      const valid = await rawRequest(
+        fan,
+        "POST",
+        "/api/debates",
+        evil,
+        JSON.stringify(debateBody()),
+      );
       expect(valid.status).toBe(403);
       expect((await errorOf(valid)).code).toBe("BAD_ORIGIN");
 
@@ -275,18 +323,36 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
       expect(broken.status).toBe(403);
       expect((await errorOf(broken)).code).toBe("BAD_ORIGIN");
 
-      const noOrigin = await rawRequest(fan, "POST", "/api/debates", { "Content-Type": "application/json" }, "{}");
+      const noOrigin = await rawRequest(
+        fan,
+        "POST",
+        "/api/debates",
+        { "Content-Type": "application/json" },
+        "{}",
+      );
       expect(noOrigin.status).toBe(403);
     });
 
     test("a body that is not JSON answers 415, broken JSON answers 400 INVALID_JSON", async () => {
       const { fan } = await newFan(true);
 
-      const text = await rawRequest(fan, "POST", "/api/debates", { Origin: baseUrl, "Content-Type": "text/plain" }, "hello");
+      const text = await rawRequest(
+        fan,
+        "POST",
+        "/api/debates",
+        { Origin: baseUrl, "Content-Type": "text/plain" },
+        "hello",
+      );
       expect(text.status).toBe(415);
       expect((await errorOf(text)).code).toBe("UNSUPPORTED_MEDIA_TYPE");
 
-      const broken = await rawRequest(fan, "POST", "/api/debates", { Origin: baseUrl, "Content-Type": "application/json" }, "{not json");
+      const broken = await rawRequest(
+        fan,
+        "POST",
+        "/api/debates",
+        { Origin: baseUrl, "Content-Type": "application/json" },
+        "{not json",
+      );
       expect(broken.status).toBe(400);
       expect((await errorOf(broken)).code).toBe("INVALID_JSON");
     });
@@ -369,12 +435,21 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
       ];
       for (let i = 0; i < scores.length; i++) {
         const [voteScore, credibilityScore] = scores[i]!;
-        await prisma.debate.update({ where: { id: ids[i]! }, data: { voteScore: voteScore, credibilityScore: credibilityScore } });
+        await prisma.debate.update({
+          where: { id: ids[i]! },
+          data: { voteScore: voteScore, credibilityScore: credibilityScore },
+        });
       }
 
       const page1 = await getList(fan, `sort=top&author=${username}&limit=2`);
-      const page2 = await getList(fan, `sort=top&author=${username}&limit=2&cursor=${page1.nextCursor}`);
-      const page3 = await getList(fan, `sort=TOP&author=${username}&limit=2&cursor=${page2.nextCursor}`);
+      const page2 = await getList(
+        fan,
+        `sort=top&author=${username}&limit=2&cursor=${page1.nextCursor}`,
+      );
+      const page3 = await getList(
+        fan,
+        `sort=TOP&author=${username}&limit=2&cursor=${page2.nextCursor}`,
+      );
       expect(page3.nextCursor).toBeNull();
 
       const order = [...idsOf(page1.items), ...idsOf(page2.items), ...idsOf(page3.items)];
@@ -385,13 +460,19 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
     test("category, tag and author filters combine with AND; unknown ones give an empty list", async () => {
       const { fan, username } = await newFan(true);
 
-      const match = await postDebate(fan, debateBody({ categories: ["TRANSFER"], tags: ["arsenal"] }));
+      const match = await postDebate(
+        fan,
+        debateBody({ categories: ["TRANSFER"], tags: ["arsenal"] }),
+      );
       await postDebate(fan, debateBody({ categories: ["TRANSFER"] }));
       await postDebate(fan, debateBody({ categories: ["TACTICAL"], tags: ["arsenal"] }));
       const matchId = Debate.parse(await match.json()).id;
 
       // uppercase username should still match
-      const filtered = await getList(fan, `category=transfer&tag=arsenal&author=${username.toUpperCase()}`);
+      const filtered = await getList(
+        fan,
+        `category=transfer&tag=arsenal&author=${username.toUpperCase()}`,
+      );
       expect(idsOf(filtered.items)).toEqual([matchId]);
 
       const noTag = await getList(fan, "tag=nope");
@@ -417,7 +498,9 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
       const page1 = await getList(fan, `author=${username}&limit=1`);
       await prisma.debate.delete({ where: { id: page1.nextCursor! } });
 
-      const stale = await fan.call(`/api/debates?author=${username}&limit=1&cursor=${page1.nextCursor}`);
+      const stale = await fan.call(
+        `/api/debates?author=${username}&limit=1&cursor=${page1.nextCursor}`,
+      );
       expect(stale.status).toBe(400);
       expect((await errorOf(stale)).code).toBe("INVALID_CURSOR");
 
@@ -448,7 +531,9 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
       const posted = await postDebate(author.fan, debateBody({ tags: ["arsenal"] }));
       const id = Debate.parse(await posted.json()).id;
       await prisma.debateVote.create({ data: { debateId: id, userId: other.userId, value: -1 } });
-      await prisma.comment.create({ data: { debateId: id, authorId: other.userId, body: "Nonsense." } });
+      await prisma.comment.create({
+        data: { debateId: id, authorId: other.userId, body: "Nonsense." },
+      });
       await prisma.review.create({ data: { debateId: id } });
 
       const byOther = await other.fan.call(`/api/debates/${id}`, { method: "DELETE" });
@@ -476,7 +561,9 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
       const malformed = await fan.call("/api/debates/abc", { method: "DELETE" });
       expect(malformed.status).toBe(404);
 
-      const evil = await rawRequest(fan, "DELETE", `/api/debates/${crypto.randomUUID()}`, { Origin: "https://evil.example" });
+      const evil = await rawRequest(fan, "DELETE", `/api/debates/${crypto.randomUUID()}`, {
+        Origin: "https://evil.example",
+      });
       expect(evil.status).toBe(403);
       expect((await errorOf(evil)).code).toBe("BAD_ORIGIN");
     });
@@ -496,10 +583,16 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
       const { userId } = await newFan(true);
       const [id] = await insertDebates(userId, 1);
       const voter = await newFan(true);
-      const vote = await prisma.debateVote.create({ data: { debateId: id!, userId: voter.userId, value: 1 } });
-      const comment = await prisma.comment.create({ data: { debateId: id!, authorId: voter.userId, body: "Agreed." } });
+      const vote = await prisma.debateVote.create({
+        data: { debateId: id!, userId: voter.userId, value: 1 },
+      });
+      const comment = await prisma.comment.create({
+        data: { debateId: id!, authorId: voter.userId, body: "Agreed." },
+      });
 
-      const deleted = await voter.fan.call("/api/auth/delete-user", { body: { password: voter.password } });
+      const deleted = await voter.fan.call("/api/auth/delete-user", {
+        body: { password: voter.password },
+      });
       expect(deleted.status).toBe(200);
 
       const voteAfter = await prisma.debateVote.findUniqueOrThrow({ where: { id: vote.id } });
@@ -529,7 +622,9 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
       expect(all.items.length).toBe(151);
       expect(all.items[0]).toEqual({ slug: "bundesliga", name: "Bundesliga", kind: "LEAGUE" });
 
-      const leagues = ListTagsResponse.parse(await (await fan.call("/api/tags?kind=LEAGUE")).json());
+      const leagues = ListTagsResponse.parse(
+        await (await fan.call("/api/tags?kind=LEAGUE")).json(),
+      );
       expect(leagues.items.length).toBe(7);
 
       const teams = ListTagsResponse.parse(await (await fan.call("/api/tags?kind=team")).json());
@@ -555,7 +650,7 @@ function hasPathStartingWith(fields: { path: string }[] | undefined, path: strin
     return false;
   }
   for (const field of fields) {
-    if (field.path === path || field.path.startsWith(path + ".")) {
+    if (field.path === path || field.path.startsWith(`${path}.`)) {
       return true;
     }
   }

@@ -29,12 +29,22 @@ describe("toCommentResponse", () => {
 
   test("shows the author like a debate does", () => {
     const comment = toCommentResponse(fakeRow());
-    expect(comment.author).toEqual({ username: "jude_fan", displayUsername: "Jude_Fan", displayName: "Jude", badge: "SPECTATOR" });
+    expect(comment.author).toEqual({
+      username: "jude_fan",
+      displayUsername: "Jude_Fan",
+      displayName: "Jude",
+      badge: "SPECTATOR",
+    });
   });
 
   test("labels a deleted account as deleted user", () => {
     const comment = toCommentResponse(fakeRow({ authorId: null, author: null }));
-    expect(comment.author).toEqual({ username: null, displayUsername: null, displayName: "deleted user", badge: null });
+    expect(comment.author).toEqual({
+      username: null,
+      displayUsername: null,
+      displayName: "deleted user",
+      badge: null,
+    });
   });
 
   test("does not leak the raw author id or anything else", () => {

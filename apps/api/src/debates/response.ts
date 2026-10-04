@@ -1,7 +1,7 @@
 import type { DebateRow } from "@varroom/db";
 import { sortTags } from "@varroom/db";
-import { Debate } from "@varroom/shared";
 import type { DebateAuthor, LatestReview, TagSummary } from "@varroom/shared";
+import { Debate } from "@varroom/shared";
 
 // db row -> shared Debate shape. single mapper so post/list/read can't drift
 
@@ -14,7 +14,12 @@ const DELETED_USER: DebateAuthor = {
 };
 
 // the author fields both debates and comments load
-type AuthorFields = { username: string | null; displayUsername: string | null; name: string; badge: "SPECTATOR" | "ASSISTANT_REF" | "CHIEF_VAR" };
+type AuthorFields = {
+  username: string | null;
+  displayUsername: string | null;
+  name: string;
+  badge: "SPECTATOR" | "ASSISTANT_REF" | "CHIEF_VAR";
+};
 
 // shared by debates and comments
 export function toAuthorResponse(author: AuthorFields | null): DebateAuthor {

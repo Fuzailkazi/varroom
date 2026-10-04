@@ -4,11 +4,11 @@
 //   bun run trace              today's gemini budget
 // Requires: DATABASE_URL (the root script loads .env).
 
-import { z } from "zod";
-import { getBudgetStatus, getReviewTrace } from "@varroom/db";
 import type { BudgetStatus, ReviewTrace } from "@varroom/db";
-import { readUsageLimits } from "@varroom/shared";
+import { getBudgetStatus, getReviewTrace } from "@varroom/db";
 import type { UsageLimits } from "@varroom/shared";
+import { readUsageLimits } from "@varroom/shared";
+import { z } from "zod";
 import { formatBudget, formatTrace } from "./traceFormat.ts";
 
 const Uuid = z.uuid();
@@ -24,7 +24,9 @@ function errorText(err: unknown): string {
 async function printTrace(reviewId: string) {
   // review ids are uuids. checking first also saves a database round trip for a typo
   if (!Uuid.safeParse(reviewId).success) {
-    console.error(`"${reviewId}" is not a review id. Review ids look like 3f9a01bc-7d2e-4c1a-9b8e-5f6a7b8c9d0e.`);
+    console.error(
+      `"${reviewId}" is not a review id. Review ids look like 3f9a01bc-7d2e-4c1a-9b8e-5f6a7b8c9d0e.`,
+    );
     process.exit(1);
   }
 

@@ -13,7 +13,9 @@ export function formatReview(result: ReviewRunResult): string {
   for (const claim of result.claims) {
     lines.push(`Claim ${claim.order} [${claim.type}]: "${claim.claimText}"`);
     if (claim.type === "UNTESTABLE") {
-      lines.push("   Not checked: this kind of claim can't be tested yet, so it is left out of the score.");
+      lines.push(
+        "   Not checked: this kind of claim can't be tested yet, so it is left out of the score.",
+      );
     }
   }
 

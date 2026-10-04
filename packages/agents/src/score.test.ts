@@ -1,5 +1,5 @@
-import { expect, test, describe } from "bun:test";
-import { computeScore, computeDecision } from "./score.ts";
+import { describe, expect, test } from "bun:test";
+import { computeDecision, computeScore } from "./score.ts";
 import type { ClaimResult } from "./types.ts";
 
 // helper: build a minimal ClaimResult with the given verdict
@@ -47,15 +47,11 @@ describe("computeScore", () => {
 
   test("INSUFFICIENT_DATA claims are excluded from score", () => {
     // only the VERIFIED claim counts: score is 100, not 50
-    expect(
-      computeScore([claim("VERIFIED"), claim("INSUFFICIENT_DATA")])
-    ).toBe(100);
+    expect(computeScore([claim("VERIFIED"), claim("INSUFFICIENT_DATA")])).toBe(100);
   });
 
   test("UNTESTABLE claims are excluded from score", () => {
-    expect(
-      computeScore([claim("REFUTED"), claim("UNTESTABLE")])
-    ).toBe(0);
+    expect(computeScore([claim("REFUTED"), claim("UNTESTABLE")])).toBe(0);
   });
 
   test("zero testable claims returns null", () => {

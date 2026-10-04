@@ -40,7 +40,9 @@ describe("readUsageLimits", () => {
   });
 
   test("a number too big to count exactly is refused", () => {
-    expect(() => readUsageLimits({ AI_DAILY_CALL_LIMIT: "99999999999999999999" })).toThrow("AI_DAILY_CALL_LIMIT");
+    expect(() => readUsageLimits({ AI_DAILY_CALL_LIMIT: "99999999999999999999" })).toThrow(
+      "AI_DAILY_CALL_LIMIT",
+    );
   });
 });
 
@@ -48,18 +50,25 @@ describe("dailyBudgetMessage", () => {
   test("says when reviews open again, in pacific time and utc", () => {
     // midnight pacific during summer time is 07:00 utc
     const message = dailyBudgetMessage(new Date("2026-09-29T07:00:00.000Z"));
-    expect(message).toBe("VAR is resting for today. Reviews open again at 12:00 AM PDT (07:00 UTC).");
+    expect(message).toBe(
+      "VAR is resting for today. Reviews open again at 12:00 AM PDT (07:00 UTC).",
+    );
   });
 
   test("in winter pacific midnight is 08:00 utc", () => {
     const message = dailyBudgetMessage(new Date("2026-12-01T08:00:00.000Z"));
-    expect(message).toBe("VAR is resting for today. Reviews open again at 12:00 AM PST (08:00 UTC).");
+    expect(message).toBe(
+      "VAR is resting for today. Reviews open again at 12:00 AM PST (08:00 UTC).",
+    );
   });
 });
 
 describe("AvailabilityResponse", () => {
   test("accepts open and resetsAt", () => {
-    const result = AvailabilityResponse.safeParse({ open: true, resetsAt: "2026-09-29T07:00:00.000Z" });
+    const result = AvailabilityResponse.safeParse({
+      open: true,
+      resetsAt: "2026-09-29T07:00:00.000Z",
+    });
     expect(result.success).toBe(true);
   });
 

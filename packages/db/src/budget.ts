@@ -1,8 +1,8 @@
+import { REVIEW_CALL_RESERVE, REVIEW_LIMIT_WINDOW_MS, REVIEW_TIMEOUT_MS } from "@varroom/shared";
 import { prisma } from "./client.ts";
 import type { Prisma } from "./generated/prisma/client.ts";
-import { REVIEW_CALL_RESERVE, REVIEW_LIMIT_WINDOW_MS, REVIEW_TIMEOUT_MS } from "@varroom/shared";
-import { findLiveReview } from "./reviews.ts";
 import type { ReviewSummaryRow } from "./reviews.ts";
+import { findLiveReview } from "./reviews.ts";
 
 // the daily gemini budget, and the one place new reviews are created.
 // the budget counts ai_calls rows, resets at midnight pacific (when gemini's free
@@ -95,7 +95,11 @@ async function readBudget(db: Prisma.TransactionClient, limit: number): Promise<
 
 // the fan cap: a fan may start `limit` reviews per rolling 24h, failed ones don't count.
 // returns when the next slot frees up, or null when the fan still has a slot
-async function fanCapRetryAt(db: Prisma.TransactionClient, userId: string, limit: number): Promise<Date | null> {
+async function fanCapRetryAt(
+  db: Prisma.TransactionClient,
+  userId: string,
+  limit: number,
+): Promise<Date | null> {
   const windowStart = new Date(Date.now() - REVIEW_LIMIT_WINDOW_MS);
   const rows = await db.review.findMany({
     where: {
@@ -146,7 +150,10 @@ export type StartReviewResult =
   | { outcome: "budget"; resetsAt: Date; budget: BudgetStatus };
 
 // the checks and the insert, all inside the start transaction
-async function startInTransaction(tx: Prisma.TransactionClient, input: StartReviewInput): Promise<StartReviewResult> {
+async function startInTransaction(
+  tx: Prisma.TransactionClient,
+  input: StartReviewInput,
+): Promise<StartReviewResult> {
   // 1. wait for our turn. every start takes this same lock, so two starts arriving
   // together run one after the other and can't both take the last slot.
   // it's the transaction lock (xact): it's released when the transaction ends, and it

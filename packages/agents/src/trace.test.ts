@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { prisma } from "@varroom/db/client";
 import { createDebate, recordAiCall } from "@varroom/db";
+import { prisma } from "@varroom/db/client";
 
 // Runs the real trace CLI as a separate process. The first tests stop before any
 // database call, so they run anywhere. The rest read the neon test branch, so they
@@ -20,7 +20,11 @@ function runTrace(args: string[], env: Record<string, string | undefined>) {
     stdout: "pipe",
     stderr: "pipe",
   });
-  return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
+  return {
+    exitCode: result.exitCode,
+    stdout: result.stdout.toString(),
+    stderr: result.stderr.toString(),
+  };
 }
 
 // the test branch only. never the developer's dev database
@@ -123,16 +127,23 @@ describe.skipIf(!onTestDatabase)("trace cli, on the test database", () => {
     expect(stdout).toContain("Duration: still running");
     expect(stdout).toContain("Totals: 2 calls, tokens in 100 / out 20 / thinking 5");
     expect(stdout).toContain("1. MODERATOR attempt 1, OK");
-    expect(stdout).toContain("2. SEARCH attempt 1 (claim 1), ERROR, tokens in 0 / out 0 / thinking 0, 1.5s, error: Gemini error 503: high demand");
+    expect(stdout).toContain(
+      "2. SEARCH attempt 1 (claim 1), ERROR, tokens in 0 / out 0 / thinking 0, 1.5s, error: Gemini error 503: high demand",
+    );
   });
 
   test("with no id, prints today's budget with the given limit", () => {
-    const { exitCode, stdout } = runTrace([], { ...testDatabaseEnv(), AI_DAILY_CALL_LIMIT: "1000000" });
+    const { exitCode, stdout } = runTrace([], {
+      ...testDatabaseEnv(),
+      AI_DAILY_CALL_LIMIT: "1000000",
+    });
 
     expect(exitCode).toBe(0);
     expect(stdout).toContain("=== Today's Gemini budget ===");
     expect(stdout).toContain("Daily limit: 1000000 calls");
     expect(stdout).toContain("New reviews: open");
-    expect(stdout).toMatch(/Resets at: \d{4}-\d{2}-\d{2} \d{2}:00 UTC \(\w{3} \d{1,2}, 12:00 AM P[DS]T\)/);
+    expect(stdout).toMatch(
+      /Resets at: \d{4}-\d{2}-\d{2} \d{2}:00 UTC \(\w{3} \d{1,2}, 12:00 AM P[DS]T\)/,
+    );
   });
 });

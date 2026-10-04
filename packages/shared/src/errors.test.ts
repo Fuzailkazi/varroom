@@ -5,7 +5,9 @@ import { ErrorResponse } from "./errors.ts";
 
 describe("ErrorResponse", () => {
   test("accepts the plain code and message shape", () => {
-    const result = ErrorResponse.safeParse({ error: { code: "NOT_FOUND", message: "No such debate." } });
+    const result = ErrorResponse.safeParse({
+      error: { code: "NOT_FOUND", message: "No such debate." },
+    });
     expect(result.success).toBe(true);
   });
 
@@ -22,7 +24,11 @@ describe("ErrorResponse", () => {
 
   test("accepts the optional existingId from a duplicate error, but only as a uuid", () => {
     const good = ErrorResponse.safeParse({
-      error: { code: "DUPLICATE_DEBATE", message: "You already posted this.", existingId: "280c06dd-a9f8-41a7-9151-d348a6a7e295" },
+      error: {
+        code: "DUPLICATE_DEBATE",
+        message: "You already posted this.",
+        existingId: "280c06dd-a9f8-41a7-9151-d348a6a7e295",
+      },
     });
     expect(good.success).toBe(true);
 

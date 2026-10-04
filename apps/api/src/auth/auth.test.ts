@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import express from "express";
 import { prisma } from "@varroom/db/client";
 import { ErrorResponse, MeResponse } from "@varroom/shared";
+import express from "express";
 import { loadEnv } from "../env.ts";
 import { Fan, newFanDetails } from "../testing/fan.ts";
 import { startTestServer } from "../testing/server.ts";
@@ -141,18 +141,27 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
     });
 
     test("refuses a display name over 50 characters", async () => {
-      const { response } = await signUp(new Fan(baseUrl), { ...newFanDetails(), name: "x".repeat(51) });
+      const { response } = await signUp(new Fan(baseUrl), {
+        ...newFanDetails(),
+        name: "x".repeat(51),
+      });
       expect(response.status).toBe(400);
       expect(await betterAuthErrorCode(response)).toBe("INVALID_DISPLAY_NAME");
     });
 
     test("refuses a password shorter than 8 characters", async () => {
-      const { response } = await signUp(new Fan(baseUrl), { ...newFanDetails(), password: "short7!" });
+      const { response } = await signUp(new Fan(baseUrl), {
+        ...newFanDetails(),
+        password: "short7!",
+      });
       expect(response.status).toBe(400);
     });
 
     test("refuses a password longer than 128 characters", async () => {
-      const { response } = await signUp(new Fan(baseUrl), { ...newFanDetails(), password: "p".repeat(129) });
+      const { response } = await signUp(new Fan(baseUrl), {
+        ...newFanDetails(),
+        password: "p".repeat(129),
+      });
       expect(response.status).toBe(400);
     });
 
@@ -172,7 +181,10 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
       const first = await signUp(new Fan(baseUrl), { ...newFanDetails(), username: `jf_${tag}` });
       expect(first.response.status).toBe(200);
 
-      const second = await signUp(new Fan(baseUrl), { ...newFanDetails(), username: `JF_${tag.toUpperCase()}` });
+      const second = await signUp(new Fan(baseUrl), {
+        ...newFanDetails(),
+        username: `JF_${tag.toUpperCase()}`,
+      });
       expect(second.response.status).toBe(400);
       expect(await betterAuthErrorCode(second.response)).toBe("USERNAME_IS_ALREADY_TAKEN");
     });
@@ -190,10 +202,21 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
       expect(profile?.displayUsername).toBe(typed);
     });
 
-    const badUsernames = ["Admin", "VARROOM", "deleted", "ab", "a".repeat(21), "jude-fan", "jude fan"];
+    const badUsernames = [
+      "Admin",
+      "VARROOM",
+      "deleted",
+      "ab",
+      "a".repeat(21),
+      "jude-fan",
+      "jude fan",
+    ];
     for (const badName of badUsernames) {
       test(`refuses the username "${badName}"`, async () => {
-        const { response } = await signUp(new Fan(baseUrl), { ...newFanDetails(), username: badName });
+        const { response } = await signUp(new Fan(baseUrl), {
+          ...newFanDetails(),
+          username: badName,
+        });
         expect(response.status).toBe(400);
         const code = await betterAuthErrorCode(response);
         expect(["INVALID_USERNAME", "USERNAME_TOO_SHORT", "USERNAME_TOO_LONG"]).toContain(code!);
@@ -209,7 +232,9 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
       expect(changeName.status).toBe(400);
       expect(await betterAuthErrorCode(changeName)).toBe("USERNAME_IS_IMMUTABLE");
 
-      const changeDisplay = await fan.call("/api/auth/update-user", { body: { displayUsername: "Someone_Else" } });
+      const changeDisplay = await fan.call("/api/auth/update-user", {
+        body: { displayUsername: "Someone_Else" },
+      });
       expect(changeDisplay.status).toBe(400);
       expect(await betterAuthErrorCode(changeDisplay)).toBe("USERNAME_IS_IMMUTABLE");
     });
@@ -229,7 +254,11 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
       const { details } = await signUp(new Fan(baseUrl));
 
       const laptop = new Fan(baseUrl);
-      const response = await signInWithUsername(laptop, details.username.toUpperCase(), details.password);
+      const response = await signInWithUsername(
+        laptop,
+        details.username.toUpperCase(),
+        details.password,
+      );
       expect(response.status).toBe(200);
       expect((await getMe(laptop)).status).toBe(200);
     });
@@ -237,8 +266,16 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
     test("a wrong email and a wrong password get the exact same 401", async () => {
       const { details } = await signUp(new Fan(baseUrl));
 
-      const wrongPassword = await signInWithEmail(new Fan(baseUrl), details.email, "not-the-password");
-      const unknownEmail = await signInWithEmail(new Fan(baseUrl), randomMissingEmail(), details.password);
+      const wrongPassword = await signInWithEmail(
+        new Fan(baseUrl),
+        details.email,
+        "not-the-password",
+      );
+      const unknownEmail = await signInWithEmail(
+        new Fan(baseUrl),
+        randomMissingEmail(),
+        details.password,
+      );
 
       expect(wrongPassword.status).toBe(401);
       expect(unknownEmail.status).toBe(401);
@@ -248,8 +285,16 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
     test("a wrong username and a wrong password get the exact same 401", async () => {
       const { details } = await signUp(new Fan(baseUrl));
 
-      const wrongPassword = await signInWithUsername(new Fan(baseUrl), details.username, "not-the-password");
-      const unknownName = await signInWithUsername(new Fan(baseUrl), `x_${details.tag}`, details.password);
+      const wrongPassword = await signInWithUsername(
+        new Fan(baseUrl),
+        details.username,
+        "not-the-password",
+      );
+      const unknownName = await signInWithUsername(
+        new Fan(baseUrl),
+        `x_${details.tag}`,
+        details.password,
+      );
 
       expect(wrongPassword.status).toBe(401);
       expect(unknownName.status).toBe(401);
@@ -260,7 +305,12 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
   describe("fields only the server may set", () => {
     test("sign up ignores role, badge and tactical IQ sent in the body", async () => {
       const fan = new Fan(baseUrl);
-      await signUp(fan, { ...newFanDetails(), role: "ADMIN", badge: "CHIEF_VAR", tacticalIqScore: 100 });
+      await signUp(fan, {
+        ...newFanDetails(),
+        role: "ADMIN",
+        badge: "CHIEF_VAR",
+        tacticalIqScore: 100,
+      });
 
       const { profile } = await getMe(fan);
       expect(profile?.role).toBe("USER");
@@ -312,7 +362,10 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
 
       // Pretend the session was created two days ago (28 days left).
       const twoDaysEarlier = new Date(session.expiresAt.getTime() - 2 * ONE_DAY_MS);
-      await prisma.session.update({ where: { id: session.id }, data: { expiresAt: twoDaysEarlier } });
+      await prisma.session.update({
+        where: { id: session.id },
+        data: { expiresAt: twoDaysEarlier },
+      });
 
       await fan.call("/api/auth/get-session");
 
@@ -367,7 +420,9 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
       const { details } = await signUp(fan);
       const firstEmail = getLastEmail(details.email);
 
-      const response = await fan.call("/api/auth/send-verification-email", { body: { email: details.email } });
+      const response = await fan.call("/api/auth/send-verification-email", {
+        body: { email: details.email },
+      });
       expect(response.status).toBe(200);
 
       const secondEmail = getLastEmail(details.email);
@@ -383,7 +438,9 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
 
       // 1. Ask for a reset link (from another device, signed out).
       const helper = new Fan(baseUrl);
-      const request = await helper.call("/api/auth/request-password-reset", { body: { email: details.email } });
+      const request = await helper.call("/api/auth/request-password-reset", {
+        body: { email: details.email },
+      });
       expect(request.status).toBe(200);
 
       // 2. The link looks like .../reset-password/<token>?callbackURL=...
@@ -392,13 +449,17 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
       const token = afterPath.split("?")[0];
 
       // 3. Set a new password with that token.
-      const newPassword = details.password + "-new";
+      const newPassword = `${details.password}-new`;
       const reset = await helper.call("/api/auth/reset-password", { body: { token, newPassword } });
       expect(reset.status).toBe(200);
 
       // The phone was signed out, the old password fails, the new one works.
       expect((await getMe(phone)).status).toBe(401);
-      const withOldPassword = await signInWithEmail(new Fan(baseUrl), details.email, details.password);
+      const withOldPassword = await signInWithEmail(
+        new Fan(baseUrl),
+        details.email,
+        details.password,
+      );
       expect(withOldPassword.status).toBe(401);
       const withNewPassword = await signInWithEmail(new Fan(baseUrl), details.email, newPassword);
       expect(withNewPassword.status).toBe(200);
@@ -420,11 +481,15 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
       expect(await betterAuthErrorCode(noPassword)).toBe("PASSWORD_REQUIRED");
 
       // Wrong password: refused.
-      const wrongPassword = await fan.call("/api/auth/delete-user", { body: { password: "wrong-password" } });
+      const wrongPassword = await fan.call("/api/auth/delete-user", {
+        body: { password: "wrong-password" },
+      });
       expect(wrongPassword.status).toBe(400);
 
       // Right password: deleted.
-      const deleted = await fan.call("/api/auth/delete-user", { body: { password: details.password } });
+      const deleted = await fan.call("/api/auth/delete-user", {
+        body: { password: details.password },
+      });
       expect(deleted.status).toBe(200);
 
       // The user, their sessions and their sign in details are gone...
@@ -494,7 +559,8 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
         ...process.env,
         NODE_ENV: "test",
         BETTER_AUTH_URL: baseUrl,
-        BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || "test-secret-that-is-at-least-32-characters",
+        BETTER_AUTH_SECRET:
+          process.env.BETTER_AUTH_SECRET || "test-secret-that-is-at-least-32-characters",
       });
       const adminApp = express();
       adminApp.locals.auth = createAuth(env, async () => {});

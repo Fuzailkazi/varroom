@@ -61,7 +61,7 @@ export class Fan {
       headers["Content-Type"] = "application/json";
     }
     if (this.cookies.size > 0) {
-      headers["Cookie"] = this.cookieHeader();
+      headers.Cookie = this.cookieHeader();
     }
 
     let method = options.method;

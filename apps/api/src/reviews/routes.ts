@@ -1,6 +1,5 @@
-import { Router } from "express";
-import type { Request, Response } from "express";
-import { z } from "zod";
+import { geminiModel } from "@varroom/agents";
+import type { ReviewSummaryRow, StartReviewResult } from "@varroom/db";
 import {
   debateExists,
   findLiveReview,
@@ -10,16 +9,22 @@ import {
   listReviewEventsAfter,
   startReviewLocked,
 } from "@varroom/db";
-import type { ReviewSummaryRow, StartReviewResult } from "@varroom/db";
-import { geminiModel } from "@varroom/agents";
-import { AvailabilityResponse, REVIEW_TIMEOUT_MS, StartReviewResponse, dailyBudgetMessage } from "@varroom/shared";
 import type { UsageLimits } from "@varroom/shared";
+import {
+  AvailabilityResponse,
+  dailyBudgetMessage,
+  REVIEW_TIMEOUT_MS,
+  StartReviewResponse,
+} from "@varroom/shared";
+import type { Request, Response } from "express";
+import { Router } from "express";
+import { z } from "zod";
 import { requireVerified } from "../auth/guards.ts";
 import { sendError } from "../errors.ts";
-import { createPerMinuteLimiter } from "../security/rateLimit.ts";
 import type { RateLimits } from "../security/rateLimit.ts";
-import { failedEvent, finalEventFromState, publicFailure, toReviewResponse } from "./response.ts";
+import { createPerMinuteLimiter } from "../security/rateLimit.ts";
 import type { StreamMessage } from "./response.ts";
+import { failedEvent, finalEventFromState, publicFailure, toReviewResponse } from "./response.ts";
 import type { ReviewRunner } from "./runner.ts";
 
 // review api: start a review, load the verdict, watch it live
@@ -39,7 +44,11 @@ export function createStartReviewRouter(runner: ReviewRunner, limits: UsageLimit
 
 // get /api/reviews/availability, /api/reviews/:id and /api/reviews/:id/events. all public,
 // so each is rate limited per ip. the limiter runs first, before any db read or stream
-export function createReviewsRouter(runner: ReviewRunner, limits: UsageLimits, rateLimits: RateLimits) {
+export function createReviewsRouter(
+  runner: ReviewRunner,
+  limits: UsageLimits,
+  rateLimits: RateLimits,
+) {
   const router = Router();
 
   // one limiter object on both routes means one shared counter per ip
@@ -82,7 +91,12 @@ function secondsUntil(at: Date): number {
   return seconds;
 }
 
-async function startReviewHandler(req: Request, res: Response, runner: ReviewRunner, limits: UsageLimits) {
+async function startReviewHandler(
+  req: Request,
+  res: Response,
+  runner: ReviewRunner,
+  limits: UsageLimits,
+) {
   // requireVerified already ran, so signedIn is set and email is confirmed
   const userId = req.signedIn!.user.id;
   const isAdmin = req.signedIn!.user.role === "ADMIN";
@@ -126,7 +140,12 @@ async function startReviewHandler(req: Request, res: Response, runner: ReviewRun
   } catch (err) {
     // we can't tell whether there's room, so start nothing (fail closed)
     console.error("review start: the cap or budget check failed:", err);
-    sendError(res, 503, "SERVICE_UNAVAILABLE", "Reviews are unavailable right now. Try again in a moment.");
+    sendError(
+      res,
+      503,
+      "SERVICE_UNAVAILABLE",
+      "Reviews are unavailable right now. Try again in a moment.",
+    );
     return;
   }
 
@@ -179,7 +198,12 @@ async function availabilityHandler(_req: Request, res: Response, limits: UsageLi
     resetsAt = budget.resetsAt;
   } catch (err) {
     console.error("review availability: the budget check failed:", err);
-    sendError(res, 503, "SERVICE_UNAVAILABLE", "Reviews are unavailable right now. Try again in a moment.");
+    sendError(
+      res,
+      503,
+      "SERVICE_UNAVAILABLE",
+      "Reviews are unavailable right now. Try again in a moment.",
+    );
     return;
   }
 

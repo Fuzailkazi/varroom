@@ -1,6 +1,6 @@
+import { nextVoteAction } from "@varroom/shared";
 import { prisma } from "./client.ts";
 import type { Prisma } from "./generated/prisma/client.ts";
-import { nextVoteAction } from "@varroom/shared";
 
 // db access for votes. same lock-then-recount pattern as comments.ts: every
 // write locks the debate row first and recounts up_votes/down_votes/vote_score
@@ -38,7 +38,11 @@ export type SetVoteResult = {
 // toggles a fan's vote on a debate: no row inserts one, the other value
 // switches it, the same value again removes it. row write and recount run
 // in one transaction, behind a lock on the debate row
-export async function setVote(debateId: string, userId: string, value: 1 | -1): Promise<SetVoteResult> {
+export async function setVote(
+  debateId: string,
+  userId: string,
+  value: 1 | -1,
+): Promise<SetVoteResult> {
   return prisma.$transaction(async (tx) => {
     const debateFound = await lockDebate(tx, debateId);
     if (!debateFound) {

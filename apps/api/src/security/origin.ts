@@ -32,7 +32,12 @@ export function requireTrustedOrigin(trustedOrigins: string[]) {
     if (METHODS_WITH_A_BODY.includes(req.method)) {
       const isJson = req.is("application/json");
       if (!isJson) {
-        sendError(res, 415, "UNSUPPORTED_MEDIA_TYPE", "Send the body as JSON (Content-Type: application/json).");
+        sendError(
+          res,
+          415,
+          "UNSUPPORTED_MEDIA_TYPE",
+          "Send the body as JSON (Content-Type: application/json).",
+        );
         return;
       }
     }

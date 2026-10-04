@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import type { NewAiCall } from "./aiCalls.ts";
+import { deleteOldAiCalls, getReviewTrace, recordAiCall } from "./aiCalls.ts";
 import { prisma } from "./client.ts";
 import { createDebate } from "./debates.ts";
-import { deleteOldAiCalls, getReviewTrace, recordAiCall } from "./aiCalls.ts";
-import type { NewAiCall } from "./aiCalls.ts";
 
 // integration tests for recordAiCall on the neon test branch.
 // only run when the root test preload pointed DATABASE_URL at the test branch
@@ -77,7 +77,14 @@ describe.skipIf(!onTestDatabase)("recordAiCall", () => {
 
     await recordAiCall(
       reviewId,
-      call({ step: "SEARCH", attempt: 2, claimOrder: 3, model: "gemini-x", durationMs: 1234, startedAt: startedAt })
+      call({
+        step: "SEARCH",
+        attempt: 2,
+        claimOrder: 3,
+        model: "gemini-x",
+        durationMs: 1234,
+        startedAt: startedAt,
+      }),
     );
 
     const rows = await prisma.aiCall.findMany({ where: { reviewId: reviewId } });
@@ -99,8 +106,17 @@ describe.skipIf(!onTestDatabase)("recordAiCall", () => {
   test("adds each call's tokens and one call to the review's totals", async () => {
     const { reviewId } = await newReview();
 
-    await recordAiCall(reviewId, call({ usage: { inputTokens: 100, outputTokens: 20, thinkingTokens: 5 } }));
-    await recordAiCall(reviewId, call({ step: "FACT_CHECKER", usage: { inputTokens: 50, outputTokens: 7, thinkingTokens: 1 } }));
+    await recordAiCall(
+      reviewId,
+      call({ usage: { inputTokens: 100, outputTokens: 20, thinkingTokens: 5 } }),
+    );
+    await recordAiCall(
+      reviewId,
+      call({
+        step: "FACT_CHECKER",
+        usage: { inputTokens: 50, outputTokens: 7, thinkingTokens: 1 },
+      }),
+    );
 
     const review = await prisma.review.findUniqueOrThrow({ where: { id: reviewId } });
     expect(review.inputTokens).toBe(150);
@@ -113,7 +129,10 @@ describe.skipIf(!onTestDatabase)("recordAiCall", () => {
   test("a failed attempt keeps its error, counts 0 tokens, and still counts as a call", async () => {
     const { reviewId } = await newReview();
 
-    await recordAiCall(reviewId, call({ status: "ERROR", error: "Gemini error 503: high demand", usage: null }));
+    await recordAiCall(
+      reviewId,
+      call({ status: "ERROR", error: "Gemini error 503: high demand", usage: null }),
+    );
 
     const row = await prisma.aiCall.findFirstOrThrow({ where: { reviewId: reviewId } });
     expect(row.status).toBe("ERROR");
@@ -199,8 +218,14 @@ describe.skipIf(!onTestDatabase)("getReviewTrace", () => {
   test("returns the review's totals and its calls, oldest first", async () => {
     const { debateId, reviewId } = await newReview();
     // saved out of order on purpose, the trace must sort them by start time
-    await recordAiCall(reviewId, call({ step: "FACT_CHECKER", startedAt: new Date("2026-09-28T10:00:03Z") }));
-    await recordAiCall(reviewId, call({ step: "MODERATOR", startedAt: new Date("2026-09-28T10:00:01Z") }));
+    await recordAiCall(
+      reviewId,
+      call({ step: "FACT_CHECKER", startedAt: new Date("2026-09-28T10:00:03Z") }),
+    );
+    await recordAiCall(
+      reviewId,
+      call({ step: "MODERATOR", startedAt: new Date("2026-09-28T10:00:01Z") }),
+    );
     await recordAiCall(
       reviewId,
       call({
@@ -210,7 +235,7 @@ describe.skipIf(!onTestDatabase)("getReviewTrace", () => {
         error: "Gemini error 503: high demand",
         usage: null,
         startedAt: new Date("2026-09-28T10:00:02Z"),
-      })
+      }),
     );
 
     const trace = await getReviewTrace(reviewId);

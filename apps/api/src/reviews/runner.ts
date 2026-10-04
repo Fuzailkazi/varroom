@@ -1,10 +1,16 @@
 import { EventEmitter } from "node:events";
-import { addReviewEvent, failInterruptedReviews, finishReviewFailed, getDebateText, getReviewState } from "@varroom/db";
-import { runReview } from "@varroom/agents";
 import type { RunAgentFn, SearchWebFn } from "@varroom/agents";
+import { runReview } from "@varroom/agents";
+import {
+  addReviewEvent,
+  failInterruptedReviews,
+  finishReviewFailed,
+  getDebateText,
+  getReviewState,
+} from "@varroom/db";
 import { REVIEW_TIMEOUT_MS } from "@varroom/shared";
-import { failedEvent, finalEventFromState, publicFailure } from "./response.ts";
 import type { StreamMessage } from "./response.ts";
+import { failedEvent, finalEventFromState, publicFailure } from "./response.ts";
 
 // runs reviews inside the api process, in the background, and tells open streams
 // what happened. single process only: a restart fails whatever was running
@@ -79,7 +85,9 @@ export function createReviewRunner(options: ReviewRunnerOptions = {}): ReviewRun
       publish(reviewId, message);
     }
     const seconds = Math.round((Date.now() - run.startedAt) / 1000);
-    console.log(`review ${reviewId}: ${state.status} after ${seconds}s (${state.failureReason ?? state.decision})`);
+    console.log(
+      `review ${reviewId}: ${state.status} after ${seconds}s (${state.failureReason ?? state.decision})`,
+    );
   }
 
   // something outside the pipeline threw (e.g. loading the debate text).
@@ -111,7 +119,10 @@ export function createReviewRunner(options: ReviewRunnerOptions = {}): ReviewRun
     const timer = setTimeout(async () => {
       timedOut = true;
       try {
-        await finishReviewFailed(reviewId, `timeout: still running after ${Math.round(timeoutMs / 1000)}s`);
+        await finishReviewFailed(
+          reviewId,
+          `timeout: still running after ${Math.round(timeoutMs / 1000)}s`,
+        );
         await sendFinal(run);
       } catch (err) {
         console.error(`review ${reviewId}: could not time it out`, err);

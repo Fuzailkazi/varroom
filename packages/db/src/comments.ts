@@ -58,7 +58,11 @@ export type CreateCommentResult = {
   existingId: string | null; // set when outcome is "duplicate"
 };
 
-export async function createComment(debateId: string, authorId: string, body: string): Promise<CreateCommentResult> {
+export async function createComment(
+  debateId: string,
+  authorId: string,
+  body: string,
+): Promise<CreateCommentResult> {
   return prisma.$transaction(async (tx) => {
     const debateFound = await lockDebate(tx, debateId);
     if (!debateFound) {
@@ -96,7 +100,11 @@ export async function createComment(debateId: string, authorId: string, body: st
 // find out if there's a next page.
 // with a cursor, prisma starts right after that comment in the same order,
 // so pages never repeat or skip
-export async function listComments(debateId: string, limit: number, cursorId: string | undefined): Promise<CommentRow[]> {
+export async function listComments(
+  debateId: string,
+  limit: number,
+  cursorId: string | undefined,
+): Promise<CommentRow[]> {
   if (cursorId === undefined) {
     return prisma.comment.findMany({
       where: { debateId: debateId },
@@ -117,7 +125,10 @@ export async function listComments(debateId: string, limit: number, cursorId: st
 }
 
 // a list cursor must be a comment of this same debate
-export async function commentBelongsToDebate(commentId: string, debateId: string): Promise<boolean> {
+export async function commentBelongsToDebate(
+  commentId: string,
+  debateId: string,
+): Promise<boolean> {
   const comment = await prisma.comment.findUnique({
     where: { id: commentId },
     select: { debateId: true },
@@ -131,7 +142,9 @@ export async function commentBelongsToDebate(commentId: string, debateId: string
 // deleting
 
 // who wrote the comment and which debate it's on, or null if there's no such comment
-export async function getCommentForDelete(id: string): Promise<{ authorId: string | null; debateId: string } | null> {
+export async function getCommentForDelete(
+  id: string,
+): Promise<{ authorId: string | null; debateId: string } | null> {
   const comment = await prisma.comment.findUnique({
     where: { id: id },
     select: { authorId: true, debateId: true },

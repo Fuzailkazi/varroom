@@ -41,7 +41,9 @@ describe("cleanUpOldAiCalls", () => {
     await cleanUpOldAiCalls(fakeDelete);
 
     expect(calls).toBe(1);
-    expect(printed.log).toHaveBeenCalledWith("ai call cleanup: deleted 7 call row(s) older than 48 hours");
+    expect(printed.log).toHaveBeenCalledWith(
+      "ai call cleanup: deleted 7 call row(s) older than 48 hours",
+    );
     expect(printed.error).not.toHaveBeenCalled();
   });
 
@@ -50,7 +52,9 @@ describe("cleanUpOldAiCalls", () => {
 
     await cleanUpOldAiCalls(async () => 0);
 
-    expect(printed.log).toHaveBeenCalledWith("ai call cleanup: deleted 0 call row(s) older than 48 hours");
+    expect(printed.log).toHaveBeenCalledWith(
+      "ai call cleanup: deleted 0 call row(s) older than 48 hours",
+    );
   });
 
   test("a failing delete is logged and never thrown, so it can't stop the api", async () => {
@@ -87,7 +91,9 @@ describe("startHourlyAiCallCleanup", () => {
 
     expect(calls).toBeGreaterThanOrEqual(3);
     expect(printed.error).toHaveBeenCalledTimes(1);
-    expect(printed.log).toHaveBeenCalledWith("ai call cleanup: deleted 1 call row(s) older than 48 hours");
+    expect(printed.log).toHaveBeenCalledWith(
+      "ai call cleanup: deleted 1 call row(s) older than 48 hours",
+    );
   });
 
   test("doesn't run straight away, the startup run is separate", async () => {

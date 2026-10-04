@@ -2,14 +2,14 @@
 // Usage: bun packages/agents/src/cli.ts "<debate text>"
 // Requires: GEMINI_API_KEY and VAR_CLI_USER_ID environment variables.
 
-import { createDebate, deleteDebate, finishReviewFailed, startReviewLocked } from "@varroom/db";
 import type { StartReviewResult } from "@varroom/db";
-import { REVIEW_TIMEOUT_MS, dailyBudgetMessage, readUsageLimits } from "@varroom/shared";
+import { createDebate, deleteDebate, finishReviewFailed, startReviewLocked } from "@varroom/db";
 import type { UsageLimits } from "@varroom/shared";
-import { geminiModel, runReview } from "./index.ts";
-import { PipelineError, ReviewStoppedError } from "./types.ts";
+import { dailyBudgetMessage, REVIEW_TIMEOUT_MS, readUsageLimits } from "@varroom/shared";
 import { formatReview } from "./format.ts";
+import { geminiModel, runReview } from "./index.ts";
 import { flushTracing, setupTracing } from "./telemetry.ts";
+import { PipelineError, ReviewStoppedError } from "./types.ts";
 
 async function main() {
   const text = process.argv[2];
@@ -49,13 +49,8 @@ async function main() {
       tagIds: [],
     });
   } catch (err) {
-    console.error(
-      "Failed to create debate row:",
-      err instanceof Error ? err.message : String(err),
-    );
-    console.error(
-      "Make sure VAR_CLI_USER_ID is a real user id from the dev database.",
-    );
+    console.error("Failed to create debate row:", err instanceof Error ? err.message : String(err));
+    console.error("Make sure VAR_CLI_USER_ID is a real user id from the dev database.");
     process.exit(1);
   }
 
@@ -103,9 +98,15 @@ async function main() {
   const timer = setTimeout(async () => {
     timedOut = true;
     try {
-      await finishReviewFailed(reviewId, `timeout: still running after ${Math.round(REVIEW_TIMEOUT_MS / 1000)}s`);
+      await finishReviewFailed(
+        reviewId,
+        `timeout: still running after ${Math.round(REVIEW_TIMEOUT_MS / 1000)}s`,
+      );
     } catch (err) {
-      console.error("Could not time the review out:", err instanceof Error ? err.message : String(err));
+      console.error(
+        "Could not time the review out:",
+        err instanceof Error ? err.message : String(err),
+      );
     }
   }, REVIEW_TIMEOUT_MS);
 
@@ -123,7 +124,9 @@ async function main() {
     }
   } catch (err) {
     if (err instanceof ReviewStoppedError) {
-      console.error("\nThe review ended before it finished (it timed out, or its debate was deleted).");
+      console.error(
+        "\nThe review ended before it finished (it timed out, or its debate was deleted).",
+      );
     } else if (err instanceof PipelineError) {
       console.error(`\nPipeline failed at step "${err.step}": ${err.message}`);
     } else {
@@ -147,7 +150,10 @@ async function deleteDebateQuietly(debateId: string) {
   try {
     await deleteDebate(debateId);
   } catch (err) {
-    console.error(`Could not delete the throwaway debate ${debateId}:`, err instanceof Error ? err.message : String(err));
+    console.error(
+      `Could not delete the throwaway debate ${debateId}:`,
+      err instanceof Error ? err.message : String(err),
+    );
   }
 }
 

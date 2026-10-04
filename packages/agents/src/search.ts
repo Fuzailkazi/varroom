@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
-import { geminiModel } from "./types.ts";
 import type { SearchReply, WebSource } from "./types.ts";
+import { geminiModel } from "./types.ts";
 import { toTokenUsage } from "./usage.ts";
 
 export type { WebSource } from "./types.ts";
@@ -25,8 +25,7 @@ export async function searchWeb(query: string): Promise<SearchReply> {
     },
   });
 
-  const chunks =
-    response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+  const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
 
   const sources: WebSource[] = [];
   const seen = new Set<string>();

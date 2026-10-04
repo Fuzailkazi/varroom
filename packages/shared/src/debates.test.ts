@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { CreateDebateRequest, Debate, ListDebatesQuery, ListTagsQuery, VoteRequest, nextVoteAction } from "./debates.ts";
+import {
+  CreateDebateRequest,
+  Debate,
+  ListDebatesQuery,
+  ListTagsQuery,
+  nextVoteAction,
+  VoteRequest,
+} from "./debates.ts";
 
 // schema tests, no db. checks how bodies/queries get cleaned and validated
 
@@ -34,12 +41,18 @@ describe("CreateDebateRequest", () => {
   });
 
   test("trims the title and turns line breaks into spaces", () => {
-    const result = CreateDebateRequest.parse({ ...validBody(), title: "  Arsenal should\r\nsign a striker  " });
+    const result = CreateDebateRequest.parse({
+      ...validBody(),
+      title: "  Arsenal should\r\nsign a striker  ",
+    });
     expect(result.title).toBe("Arsenal should sign a striker");
   });
 
   test("trims the thesis", () => {
-    const result = CreateDebateRequest.parse({ ...validBody(), thesis: "   They create plenty of chances but finish too few of them.   " });
+    const result = CreateDebateRequest.parse({
+      ...validBody(),
+      thesis: "   They create plenty of chances but finish too few of them.   ",
+    });
     expect(result.thesis).toBe("They create plenty of chances but finish too few of them.");
   });
 
@@ -79,23 +92,35 @@ describe("CreateDebateRequest", () => {
     expect(issuePaths(none)).toEqual(["categories"]);
 
     // 5 distinct values, dedupe won't save it
-    const five = CreateDebateRequest.safeParse({ ...validBody(), categories: ["TACTICAL", "TRANSFER", "PLAYER", "OTHER", "GOSSIP"] });
+    const five = CreateDebateRequest.safeParse({
+      ...validBody(),
+      categories: ["TACTICAL", "TRANSFER", "PLAYER", "OTHER", "GOSSIP"],
+    });
     expect(five.success).toBe(false);
     expect(issuePaths(five)[0]?.startsWith("categories")).toBe(true);
   });
 
   test("names the position of an unknown category", () => {
-    const result = CreateDebateRequest.safeParse({ ...validBody(), categories: ["TACTICAL", "GOSSIP"] });
+    const result = CreateDebateRequest.safeParse({
+      ...validBody(),
+      categories: ["TACTICAL", "GOSSIP"],
+    });
     expect(issuePaths(result)).toEqual(["categories.1"]);
   });
 
   test("lowercases and trims tag slugs and removes repeats", () => {
-    const result = CreateDebateRequest.parse({ ...validBody(), tags: ["Arsenal", " arsenal ", "CHELSEA"] });
+    const result = CreateDebateRequest.parse({
+      ...validBody(),
+      tags: ["Arsenal", " arsenal ", "CHELSEA"],
+    });
     expect(result.tags).toEqual(["arsenal", "chelsea"]);
   });
 
   test("refuses more than 5 tags", () => {
-    const result = CreateDebateRequest.safeParse({ ...validBody(), tags: ["a", "b", "c", "d", "e", "f"] });
+    const result = CreateDebateRequest.safeParse({
+      ...validBody(),
+      tags: ["a", "b", "c", "d", "e", "f"],
+    });
     expect(issuePaths(result)).toEqual(["tags"]);
   });
 
@@ -105,7 +130,10 @@ describe("CreateDebateRequest", () => {
   });
 
   test("a missing title or a non string title fails on title", () => {
-    const missing = CreateDebateRequest.safeParse({ thesis: validBody().thesis, categories: ["OTHER"] });
+    const missing = CreateDebateRequest.safeParse({
+      thesis: validBody().thesis,
+      categories: ["OTHER"],
+    });
     expect(issuePaths(missing)).toEqual(["title"]);
 
     const number = CreateDebateRequest.safeParse({ ...validBody(), title: 42 });
@@ -128,7 +156,12 @@ describe("ListDebatesQuery", () => {
   });
 
   test("accepts sort, category and kind in any letter case", () => {
-    const result = ListDebatesQuery.parse({ sort: " TOP ", category: "transfer", author: "JUDE_FAN", tag: " Arsenal " });
+    const result = ListDebatesQuery.parse({
+      sort: " TOP ",
+      category: "transfer",
+      author: "JUDE_FAN",
+      tag: " Arsenal ",
+    });
     expect(result.sort).toBe("top");
     expect(result.category).toBe("TRANSFER");
     expect(result.author).toBe("jude_fan"); // stored lowercase

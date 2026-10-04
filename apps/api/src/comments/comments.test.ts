@@ -79,13 +79,25 @@ async function getPage(debateId: string, query: string) {
 }
 
 // inserts comments directly, a second apart so the order is predictable. newest first
-async function insertComments(debateId: string, authorId: string, count: number): Promise<string[]> {
+async function insertComments(
+  debateId: string,
+  authorId: string,
+  count: number,
+): Promise<string[]> {
   const start = Date.now() - 60 * 60 * 1000;
   const rows = [];
   for (let i = 0; i < count; i++) {
-    rows.push({ debateId: debateId, authorId: authorId, body: `Inserted comment ${i}`, createdAt: new Date(start - i * 1000) });
+    rows.push({
+      debateId: debateId,
+      authorId: authorId,
+      body: `Inserted comment ${i}`,
+      createdAt: new Date(start - i * 1000),
+    });
   }
-  const created = await prisma.comment.createManyAndReturn({ data: rows, select: { id: true, createdAt: true } });
+  const created = await prisma.comment.createManyAndReturn({
+    data: rows,
+    select: { id: true, createdAt: true },
+  });
   created.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   await prisma.debate.update({ where: { id: debateId }, data: { commentCount: count } });
   return idsOf(created);
@@ -100,8 +112,18 @@ function idsOf(items: { id: string }[]): string[] {
   return ids;
 }
 
-async function rawRequest(fan: Fan, method: string, path: string, headers: Record<string, string>, body?: string) {
-  return fetch(baseUrl + path, { method: method, headers: { ...headers, Cookie: fan.cookieHeader() }, body: body });
+async function rawRequest(
+  fan: Fan,
+  method: string,
+  path: string,
+  headers: Record<string, string>,
+  body?: string,
+) {
+  return fetch(baseUrl + path, {
+    method: method,
+    headers: { ...headers, Cookie: fan.cookieHeader() },
+    body: body,
+  });
 }
 
 // the tests
@@ -112,7 +134,10 @@ describe.skipIf(!hasTestDatabase)("comments API", () => {
       const author = await newFan(true);
       const debateId = await newDebate(author.userId);
 
-      const response = await postComment(author.fan, debateId, { body: "  Wrong.\r\nHe is a 10.  ", debateId: "ignored" });
+      const response = await postComment(author.fan, debateId, {
+        body: "  Wrong.\r\nHe is a 10.  ",
+        debateId: "ignored",
+      });
       expect(response.status).toBe(201);
       const comment = Comment.parse(await response.json());
 
@@ -168,7 +193,13 @@ describe.skipIf(!hasTestDatabase)("comments API", () => {
       expect(unknown.status).toBe(404);
 
       // bad origin wins over everything, even with a broken body
-      const evil = await rawRequest(author.fan, "POST", `/api/debates/${debateId}/comments`, { Origin: "https://evil.example", "Content-Type": "application/json" }, "{");
+      const evil = await rawRequest(
+        author.fan,
+        "POST",
+        `/api/debates/${debateId}/comments`,
+        { Origin: "https://evil.example", "Content-Type": "application/json" },
+        "{",
+      );
       expect(evil.status).toBe(403);
       expect((await errorOf(evil)).code).toBe("BAD_ORIGIN");
     });
@@ -192,7 +223,10 @@ describe.skipIf(!hasTestDatabase)("comments API", () => {
       expect(elsewhere.status).toBe(201);
 
       // an old identical comment does not count
-      await prisma.comment.update({ where: { id: firstId }, data: { createdAt: new Date(Date.now() - 2 * 60 * 1000) } });
+      await prisma.comment.update({
+        where: { id: firstId },
+        data: { createdAt: new Date(Date.now() - 2 * 60 * 1000) },
+      });
       const later = await postComment(author.fan, debateId, { body: "Same words." });
       expect(later.status).toBe(201);
     });
@@ -241,7 +275,9 @@ describe.skipIf(!hasTestDatabase)("comments API", () => {
       expect(notAnId.status).toBe(400);
       expect((await errorOf(notAnId)).code).toBe("INVALID_CURSOR");
 
-      const wrongDebate = await anon.call(`/api/debates/${debateId}/comments?cursor=${otherIds[0]}`);
+      const wrongDebate = await anon.call(
+        `/api/debates/${debateId}/comments?cursor=${otherIds[0]}`,
+      );
       expect(wrongDebate.status).toBe(400);
       expect((await errorOf(wrongDebate)).code).toBe("INVALID_CURSOR");
 
@@ -270,7 +306,12 @@ describe.skipIf(!hasTestDatabase)("comments API", () => {
       await prisma.comment.update({ where: { id: id! }, data: { authorId: null } });
 
       const page = await getPage(debateId, "");
-      expect(page.items[0]?.author).toEqual({ username: null, displayUsername: null, displayName: "deleted user", badge: null });
+      expect(page.items[0]?.author).toEqual({
+        username: null,
+        displayUsername: null,
+        displayName: "deleted user",
+        badge: null,
+      });
     });
   });
 
@@ -370,7 +411,9 @@ describe.skipIf(!hasTestDatabase)("comments API", () => {
       const posted = await postComment(commenter.fan, debateId, { body: "I was here." });
       const commentId = Comment.parse(await posted.json()).id;
 
-      const deleted = await commenter.fan.call("/api/auth/delete-user", { body: { password: commenter.password } });
+      const deleted = await commenter.fan.call("/api/auth/delete-user", {
+        body: { password: commenter.password },
+      });
       expect(deleted.status).toBe(200);
 
       const row = await prisma.comment.findUniqueOrThrow({ where: { id: commentId } });

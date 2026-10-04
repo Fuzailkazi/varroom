@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { ReviewDetailClaim, ReviewDetailEvidence, ReviewDetailRow, ReviewStateRow } from "@varroom/db";
+import type {
+  ReviewDetailClaim,
+  ReviewDetailEvidence,
+  ReviewDetailRow,
+  ReviewStateRow,
+} from "@varroom/db";
 import { finalEventFromState, publicFailure, toReviewResponse } from "./response.ts";
 
 // response.ts turns saved review rows into what the public sees.
@@ -102,7 +107,9 @@ describe("publicFailure", () => {
   });
 
   test("the raw error text never ends up in what the public sees", () => {
-    const failure = publicFailure("search: Gemini error 429: quota exceeded for model gemini-2.5-flash");
+    const failure = publicFailure(
+      "search: Gemini error 429: quota exceeded for model gemini-2.5-flash",
+    );
 
     const shown = JSON.stringify(failure);
     expect(shown).not.toContain("429");
@@ -129,7 +136,9 @@ describe("finalEventFromState", () => {
   });
 
   test("a complete review with no score keeps the score null", () => {
-    const message = finalEventFromState(reviewState({ decision: "INCONCLUSIVE", credibilityScore: null }));
+    const message = finalEventFromState(
+      reviewState({ decision: "INCONCLUSIVE", credibilityScore: null }),
+    );
 
     const data = message?.data as { credibilityScore: number | null; decision: string };
     expect(data.credibilityScore).toBeNull();
@@ -138,7 +147,12 @@ describe("finalEventFromState", () => {
 
   test("a failed review becomes review_failed with only the public category", () => {
     const message = finalEventFromState(
-      reviewState({ status: "FAILED", decision: null, credibilityScore: null, failureReason: "timeout: 180s" }),
+      reviewState({
+        status: "FAILED",
+        decision: null,
+        credibilityScore: null,
+        failureReason: "timeout: 180s",
+      }),
     );
 
     expect(message).toEqual({
@@ -183,7 +197,10 @@ describe("toReviewResponse", () => {
 
     const body = toReviewResponse(row);
 
-    expect(body.review.failure).toEqual({ category: "ai_service", message: "The AI service had a problem." });
+    expect(body.review.failure).toEqual({
+      category: "ai_service",
+      message: "The AI service had a problem.",
+    });
     expect(JSON.stringify(body)).not.toContain("503");
     expect(JSON.stringify(body)).not.toContain("failureReason");
   });
@@ -207,7 +224,9 @@ describe("toReviewResponse", () => {
   });
 
   test("an untestable claim shows UNTESTABLE, even though the db keeps it PENDING", () => {
-    const row = detailRow({ claims: [claimRow({ type: "UNTESTABLE", verdict: "PENDING", citedLabels: [] })] });
+    const row = detailRow({
+      claims: [claimRow({ type: "UNTESTABLE", verdict: "PENDING", citedLabels: [] })],
+    });
 
     const claim = toReviewResponse(row).review.claims[0];
 
@@ -223,7 +242,9 @@ describe("toReviewResponse", () => {
   });
 
   test("a claim with no second position leaves positionB out", () => {
-    const row = detailRow({ claims: [claimRow({ entities: { player: "Pedri", positionA: "8" } })] });
+    const row = detailRow({
+      claims: [claimRow({ entities: { player: "Pedri", positionA: "8" } })],
+    });
 
     const claim = toReviewResponse(row).review.claims[0];
 
@@ -264,7 +285,13 @@ describe("toReviewResponse", () => {
 
   test("evidence status: a search that threw is search_failed, and its error text stays hidden", () => {
     const row = detailRow({
-      evidence: [evidenceRow({ sourceUrl: null, sourceTitle: null, error: "Gemini error 429: quota exceeded" })],
+      evidence: [
+        evidenceRow({
+          sourceUrl: null,
+          sourceTitle: null,
+          error: "Gemini error 429: quota exceeded",
+        }),
+      ],
     });
 
     const body = toReviewResponse(row);
@@ -297,7 +324,9 @@ describe("toReviewResponse", () => {
   });
 
   test("a published date is sent as an ISO string", () => {
-    const row = detailRow({ evidence: [evidenceRow({ publishedAt: new Date("2026-05-01T00:00:00.000Z") })] });
+    const row = detailRow({
+      evidence: [evidenceRow({ publishedAt: new Date("2026-05-01T00:00:00.000Z") })],
+    });
 
     const evidence = toReviewResponse(row).review.evidence[0];
 

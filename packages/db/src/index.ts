@@ -1,50 +1,51 @@
 export {
+  type AiCallStatusValue,
+  type AiCallStepValue,
+  deleteOldAiCalls,
+  getReviewTrace,
+  type NewAiCall,
+  type ReviewTrace,
+  type ReviewTraceCall,
+  recordAiCall,
+} from "./aiCalls.ts";
+export {
+  type BudgetStatus,
+  getBudgetStatus,
+  type StartReviewInput,
+  type StartReviewResult,
+  startReviewLocked,
+} from "./budget.ts";
+export {
+  type CommentRow,
+  type CreateCommentResult,
+  commentBelongsToDebate,
+  createComment,
+  deleteComment,
+  getCommentForDelete,
+  listComments,
+} from "./comments.ts";
+export {
   countDebatesSince,
   createDebate,
+  type DebateCategoryValue,
+  type DebateRow,
   debateExists,
   deleteDebate,
   findRecentDuplicate,
   getDebateAuthor,
   getDebatesByIds,
   getVotesForUser,
-  listDebateIds,
-  type DebateCategoryValue,
-  type DebateRow,
   type ListDebateIdsOptions,
+  listDebateIds,
   type NewDebate,
 } from "./debates.ts";
-export {
-  commentBelongsToDebate,
-  createComment,
-  deleteComment,
-  getCommentForDelete,
-  listComments,
-  type CommentRow,
-  type CreateCommentResult,
-} from "./comments.ts";
 export { checkDatabase, type DatabaseState } from "./health.ts";
-export { setVote, type SetVoteResult } from "./votes.ts";
-export { findTagsBySlugs, listTags, sortTags, type TagRow } from "./tags.ts";
-export { getUserProfile, type UserProfile } from "./users.ts";
-export {
-  deleteOldAiCalls,
-  getReviewTrace,
-  recordAiCall,
-  type AiCallStatusValue,
-  type AiCallStepValue,
-  type NewAiCall,
-  type ReviewTrace,
-  type ReviewTraceCall,
-} from "./aiCalls.ts";
-export {
-  getBudgetStatus,
-  startReviewLocked,
-  type BudgetStatus,
-  type StartReviewInput,
-  type StartReviewResult,
-} from "./budget.ts";
 export {
   addReviewEvent,
+  type DecisionValue,
+  type FinishedClaim,
+  type FinishedEvidence,
+  type FinishedReview,
   failInterruptedReviews,
   findLiveReview,
   finishReviewComplete,
@@ -53,11 +54,6 @@ export {
   getReviewDetail,
   getReviewState,
   listReviewEventsAfter,
-  startReview,
-  type DecisionValue,
-  type FinishedClaim,
-  type FinishedEvidence,
-  type FinishedReview,
   type ReviewDetailClaim,
   type ReviewDetailEvidence,
   type ReviewDetailRow,
@@ -65,4 +61,8 @@ export {
   type ReviewStateRow,
   type ReviewStatusValue,
   type ReviewSummaryRow,
+  startReview,
 } from "./reviews.ts";
+export { findTagsBySlugs, listTags, sortTags, type TagRow } from "./tags.ts";
+export { getUserProfile, type UserProfile } from "./users.ts";
+export { type SetVoteResult, setVote } from "./votes.ts";

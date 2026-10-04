@@ -1,5 +1,5 @@
-import type { NextFunction, Request, Response } from "express";
 import type { ErrorResponse, FieldError } from "@varroom/shared";
+import type { NextFunction, Request, Response } from "express";
 
 // optional extras on an error
 export type ErrorExtras = {
@@ -11,7 +11,13 @@ export type ErrorExtras = {
 // Every error our own routes send looks the same:
 //   { "error": { "code": "EMAIL_NOT_VERIFIED", "message": "Confirm your email first." } }
 // "code" is for programs (it never changes), "message" is for people.
-export function sendError(res: Response, status: number, code: string, message: string, extras: ErrorExtras = {}) {
+export function sendError(
+  res: Response,
+  status: number,
+  code: string,
+  message: string,
+  extras: ErrorExtras = {},
+) {
   const body: ErrorResponse = {
     error: { code: code, message: message },
   };

@@ -1,9 +1,21 @@
-import { Router } from "express";
-import type { Request, Response } from "express";
-import { z } from "zod";
-import { commentBelongsToDebate, createComment, debateExists, deleteComment, getCommentForDelete, listComments } from "@varroom/db";
 import type { CommentRow } from "@varroom/db";
-import { Comment, CreateCommentRequest, ListCommentsQuery, ListCommentsResponse } from "@varroom/shared";
+import {
+  commentBelongsToDebate,
+  createComment,
+  debateExists,
+  deleteComment,
+  getCommentForDelete,
+  listComments,
+} from "@varroom/db";
+import {
+  Comment,
+  CreateCommentRequest,
+  ListCommentsQuery,
+  ListCommentsResponse,
+} from "@varroom/shared";
+import type { Request, Response } from "express";
+import { Router } from "express";
+import { z } from "zod";
 import { requireSession, requireVerified } from "../auth/guards.ts";
 import { toAuthorResponse } from "../debates/response.ts";
 import { sendError } from "../errors.ts";
@@ -68,7 +80,9 @@ async function createCommentHandler(req: Request, res: Response) {
   }
 
   if (result.outcome === "duplicate") {
-    sendError(res, 409, "DUPLICATE_COMMENT", "You just posted this comment.", { existingId: result.existingId });
+    sendError(res, 409, "DUPLICATE_COMMENT", "You just posted this comment.", {
+      existingId: result.existingId,
+    });
     return;
   }
 
@@ -104,7 +118,12 @@ async function listCommentsHandler(req: Request, res: Response) {
       cursorOk = await commentBelongsToDebate(query.cursor, debateId);
     }
     if (!cursorOk) {
-      sendError(res, 400, "INVALID_CURSOR", "This page link is out of date. Start again from the first page.");
+      sendError(
+        res,
+        400,
+        "INVALID_CURSOR",
+        "This page link is out of date. Start again from the first page.",
+      );
       return;
     }
   }

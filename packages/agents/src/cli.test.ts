@@ -39,7 +39,9 @@ describe("cli", () => {
   });
 
   test("exits 1 and names the variable when GEMINI_API_KEY is missing", () => {
-    const { exitCode, stderr } = runCli(["Bellingham is better as a 9"], { VAR_CLI_USER_ID: "user-1" });
+    const { exitCode, stderr } = runCli(["Bellingham is better as a 9"], {
+      VAR_CLI_USER_ID: "user-1",
+    });
 
     expect(exitCode).toBe(1);
     expect(stderr).toContain("GEMINI_API_KEY is not set");

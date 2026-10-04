@@ -61,7 +61,12 @@ export async function startReview(reviewId: string): Promise<boolean> {
 }
 
 // saves one progress event and returns its id (a string, it's a bigint in the db)
-export async function addReviewEvent(reviewId: string, seq: number, type: string, payload: unknown): Promise<string> {
+export async function addReviewEvent(
+  reviewId: string,
+  seq: number,
+  type: string,
+  payload: unknown,
+): Promise<string> {
   const event = await prisma.reviewEvent.create({
     data: {
       reviewId: reviewId,
@@ -82,7 +87,10 @@ export type ReviewEventRow = {
 };
 
 // saved events of a review with an id above afterId (all of them when afterId is null), oldest first
-export async function listReviewEventsAfter(reviewId: string, afterId: bigint | null): Promise<ReviewEventRow[]> {
+export async function listReviewEventsAfter(
+  reviewId: string,
+  afterId: bigint | null,
+): Promise<ReviewEventRow[]> {
   let where: Prisma.ReviewEventWhereInput = { reviewId: reviewId };
   if (afterId !== null) {
     where = { reviewId: reviewId, id: { gt: afterId } };
@@ -139,7 +147,10 @@ export type FinishedReview = {
 // saves a finished review in one transaction: marks it COMPLETE, writes the evidence,
 // claims and citation links, drops its progress events, and copies the score onto the debate.
 // returns false (and writes nothing) if the review already ended, e.g. it timed out
-export async function finishReviewComplete(reviewId: string, finished: FinishedReview): Promise<boolean> {
+export async function finishReviewComplete(
+  reviewId: string,
+  finished: FinishedReview,
+): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
     // 1. only a live review can be completed. this is what drops a late result
     const updated = await tx.review.updateMany({
@@ -209,9 +220,15 @@ export async function finishReviewComplete(reviewId: string, finished: FinishedR
 
     // 5. the board shows the newest completed score. skip when there's no score
     if (finished.score !== null) {
-      const review = await tx.review.findUnique({ where: { id: reviewId }, select: { debateId: true } });
+      const review = await tx.review.findUnique({
+        where: { id: reviewId },
+        select: { debateId: true },
+      });
       if (review) {
-        await tx.debate.update({ where: { id: review.debateId }, data: { credibilityScore: finished.score } });
+        await tx.debate.update({
+          where: { id: review.debateId },
+          data: { credibilityScore: finished.score },
+        });
       }
     }
 

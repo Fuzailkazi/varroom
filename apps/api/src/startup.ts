@@ -16,7 +16,9 @@ const REAL_JOBS: StartupJobs = {
 };
 
 // runs the startup jobs in order and returns the hourly cleanup timer
-export async function runStartupJobs(jobs: StartupJobs = REAL_JOBS): Promise<ReturnType<typeof setInterval>> {
+export async function runStartupJobs(
+  jobs: StartupJobs = REAL_JOBS,
+): Promise<ReturnType<typeof setInterval>> {
   // 1. reviews the last process was running were cut off. fail them before taking requests
   await jobs.recover();
 

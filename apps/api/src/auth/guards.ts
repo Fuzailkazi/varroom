@@ -1,5 +1,5 @@
-import type { NextFunction, Request, Response } from "express";
 import { fromNodeHeaders } from "better-auth/node";
+import type { NextFunction, Request, Response } from "express";
 import { sendError } from "../errors.ts";
 import type { Auth } from "./auth.ts";
 
@@ -69,7 +69,12 @@ export async function requireVerified(req: Request, res: Response, next: NextFun
     return;
   }
   if (!signedIn.user.emailVerified) {
-    sendError(res, 403, "EMAIL_NOT_VERIFIED", "Confirm your email first. Check your inbox for the link.");
+    sendError(
+      res,
+      403,
+      "EMAIL_NOT_VERIFIED",
+      "Confirm your email first. Check your inbox for the link.",
+    );
     return;
   }
   next();

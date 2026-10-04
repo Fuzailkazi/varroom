@@ -1,21 +1,21 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { BaseLlm, LLMRegistry } from "@google/adk";
 import type { BaseLlmConnection, LlmRequest, LlmResponse, OTelHooks } from "@google/adk";
+import { BaseLlm, LLMRegistry } from "@google/adk";
 import { trace } from "@opentelemetry/api";
+import type { SearchWebFn } from "./pipeline.ts";
+import { runPipeline } from "./pipeline.ts";
+import type { SpanProcessor } from "./telemetry.ts";
 import {
   ADK_TRACER_NAME,
   DEFAULT_LANGFUSE_HOST,
+  flushTracing,
   LANGFUSE_SESSION_ATTRIBUTE,
   LANGFUSE_TRACES_PATH,
-  flushTracing,
   langfuseExportConfig,
   onlyAdkSpans,
   reviewSessionTagger,
   setupTracing,
 } from "./telemetry.ts";
-import type { SpanProcessor } from "./telemetry.ts";
-import { runPipeline } from "./pipeline.ts";
-import type { SearchWebFn } from "./pipeline.ts";
 
 const KEYS = { LANGFUSE_PUBLIC_KEY: "pk-lf-test", LANGFUSE_SECRET_KEY: "sk-lf-test" };
 
@@ -50,7 +50,9 @@ describe("langfuseExportConfig", () => {
     expect(langfuseExportConfig({})).toBeNull();
     expect(langfuseExportConfig({ LANGFUSE_PUBLIC_KEY: "pk-lf-test" })).toBeNull();
     expect(langfuseExportConfig({ LANGFUSE_SECRET_KEY: "sk-lf-test" })).toBeNull();
-    expect(langfuseExportConfig({ LANGFUSE_PUBLIC_KEY: "  ", LANGFUSE_SECRET_KEY: "sk-lf-test" })).toBeNull();
+    expect(
+      langfuseExportConfig({ LANGFUSE_PUBLIC_KEY: "  ", LANGFUSE_SECRET_KEY: "sk-lf-test" }),
+    ).toBeNull();
   });
 
   test("with both keys it points at Langfuse cloud with basic auth", () => {
@@ -70,7 +72,10 @@ describe("langfuseExportConfig", () => {
   });
 
   test("uses LANGFUSE_HOST, trimmed and without a trailing slash", () => {
-    const config = langfuseExportConfig({ ...KEYS, LANGFUSE_HOST: " https://us.cloud.langfuse.com/ " });
+    const config = langfuseExportConfig({
+      ...KEYS,
+      LANGFUSE_HOST: " https://us.cloud.langfuse.com/ ",
+    });
 
     expect(config?.tracesEndpoint).toBe("https://us.cloud.langfuse.com/api/public/otel/v1/traces");
   });
@@ -83,7 +88,7 @@ describe("langfuseExportConfig", () => {
 
   test("a LANGFUSE_HOST that is not a url throws a clear message", () => {
     expect(() => langfuseExportConfig({ ...KEYS, LANGFUSE_HOST: "cloud.langfuse.com" })).toThrow(
-      'LANGFUSE_HOST must be a url like https://cloud.langfuse.com, got "cloud.langfuse.com".'
+      'LANGFUSE_HOST must be a url like https://cloud.langfuse.com, got "cloud.langfuse.com".',
     );
   });
 });
@@ -159,7 +164,10 @@ describe("flushTracing", () => {
   });
 
   test("gives up after the time limit when Langfuse never answers", async () => {
-    const stuck = { ...makeRecordingProcessor().processor, forceFlush: () => new Promise<void>(() => {}) };
+    const stuck = {
+      ...makeRecordingProcessor().processor,
+      forceFlush: () => new Promise<void>(() => {}),
+    };
 
     const started = Date.now();
     await flushTracing(100, stuck as SpanProcessor);
@@ -169,7 +177,10 @@ describe("flushTracing", () => {
 
   test("never throws when the flush fails", async () => {
     const logged = spyOn(console, "error").mockImplementation(() => {});
-    const broken = { ...makeRecordingProcessor().processor, forceFlush: () => Promise.reject(new Error("offline")) };
+    const broken = {
+      ...makeRecordingProcessor().processor,
+      forceFlush: () => Promise.reject(new Error("offline")),
+    };
 
     try {
       await flushTracing(1000, broken as SpanProcessor);
@@ -325,7 +336,9 @@ const MODERATOR_ANSWER = {
 };
 
 const FACT_CHECKER_ANSWER = {
-  verdicts: [{ claimOrder: 1, verdict: "VERIFIED", reasoning: "The source agrees.", citedLabels: ["E1"] }],
+  verdicts: [
+    { claimOrder: 1, verdict: "VERIFIED", reasoning: "The source agrees.", citedLabels: ["E1"] },
+  ],
 };
 
 // true when the request is the fact checker's: the pipeline starts its input with "Claims:"
@@ -438,62 +451,58 @@ async function waitUntil(check: () => boolean, timeoutMs: number): Promise<void>
 // in this process. Only this test runs real ADK agents, and every later export
 // fails quietly, so the other test files are not affected.
 describe("setupTracing with a real ADK run", () => {
-  test(
-    "a failing export neither fails nor slows the review, and the spans carry the review id",
-    async () => {
-      const collector = startFailingCollector();
-      const savedModel = process.env.GEMINI_MODEL;
-      process.env.GEMINI_MODEL = FAKE_MODEL;
+  test("a failing export neither fails nor slows the review, and the spans carry the review id", async () => {
+    const collector = startFailingCollector();
+    const savedModel = process.env.GEMINI_MODEL;
+    process.env.GEMINI_MODEL = FAKE_MODEL;
 
-      try {
-        const on = setupTracing({ ...KEYS, LANGFUSE_HOST: collector.url });
-        expect(on).toBe(true);
+    try {
+      const on = setupTracing({ ...KEYS, LANGFUSE_HOST: collector.url });
+      expect(on).toBe(true);
 
-        // 1. the review runs to the end as if tracing were off
-        const result = await runPipeline("Saka is better on the right than on the left", {
-          searchWebFn: fakeSearch,
-          reviewId: REVIEW_ID,
-          retryDelayMs: 0,
-        });
-        expect(result.claims[0]?.verdict).toBe("VERIFIED");
-        expect(result.score).not.toBeNull();
+      // 1. the review runs to the end as if tracing were off
+      const result = await runPipeline("Saka is better on the right than on the left", {
+        searchWebFn: fakeSearch,
+        reviewId: REVIEW_ID,
+        retryDelayMs: 0,
+      });
+      expect(result.claims[0]?.verdict).toBe("VERIFIED");
+      expect(result.score).not.toBeNull();
 
-        // 2. spans leave in the background after the review, so it never waited on them
-        expect(collector.received).toHaveLength(0);
+      // 2. spans leave in the background after the review, so it never waited on them
+      expect(collector.received).toHaveLength(0);
 
-        // 3. another library records a span too, the way better auth does on sign in
-        trace.getTracer("better-auth").startSpan("db findOne user").end();
+      // 3. another library records a span too, the way better auth does on sign in
+      trace.getTracer("better-auth").startSpan("db findOne user").end();
 
-        // 4. flushing sends the waiting batch now, to Langfuse's path with basic auth
-        await flushTracing();
-        await waitUntil(() => collector.received.length > 0, 5_000);
-        const sent = collector.received[0];
-        expect(sent?.path).toBe(LANGFUSE_TRACES_PATH);
-        expect(sent?.authorization).toBe(EXPECTED_AUTHORIZATION);
+      // 4. flushing sends the waiting batch now, to Langfuse's path with basic auth
+      await flushTracing();
+      await waitUntil(() => collector.received.length > 0, 5_000);
+      const sent = collector.received[0];
+      expect(sent?.path).toBe(LANGFUSE_TRACES_PATH);
+      expect(sent?.authorization).toBe(EXPECTED_AUTHORIZATION);
 
-        // 5. only ADK's spans were sent, better auth's was dropped. both agent
-        // runs are there: the outer span, the agent span and its model call
-        const spans = spansIn(sent?.body);
-        const names = spans.map((span) => span.name).sort();
-        expect(names).toEqual([
-          "call_llm",
-          "call_llm",
-          "invocation",
-          "invocation",
-          "invoke_agent fact_checker",
-          "invoke_agent moderator",
-        ]);
+      // 5. only ADK's spans were sent, better auth's was dropped. both agent
+      // runs are there: the outer span, the agent span and its model call
+      const spans = spansIn(sent?.body);
+      const names = spans.map((span) => span.name).sort();
+      expect(names).toEqual([
+        "call_llm",
+        "call_llm",
+        "invocation",
+        "invocation",
+        "invoke_agent fact_checker",
+        "invoke_agent moderator",
+      ]);
 
-        // 6. and every one of them carries the review id, so Langfuse groups them
-        for (const span of spans) {
-          expect(span.attributes.get(LANGFUSE_SESSION_ATTRIBUTE)).toBe(REVIEW_ID);
-        }
-      } finally {
-        if (savedModel === undefined) delete process.env.GEMINI_MODEL;
-        else process.env.GEMINI_MODEL = savedModel;
-        collector.server.stop(true);
+      // 6. and every one of them carries the review id, so Langfuse groups them
+      for (const span of spans) {
+        expect(span.attributes.get(LANGFUSE_SESSION_ATTRIBUTE)).toBe(REVIEW_ID);
       }
-    },
-    20_000
-  );
+    } finally {
+      if (savedModel === undefined) delete process.env.GEMINI_MODEL;
+      else process.env.GEMINI_MODEL = savedModel;
+      collector.server.stop(true);
+    }
+  }, 20_000);
 });

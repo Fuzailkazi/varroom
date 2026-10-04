@@ -19,7 +19,11 @@ function claimWith(verdict: ClaimResult["verdict"]): ClaimResult {
 
 describe("buildSummary", () => {
   test("counts each verdict in a fixed order", () => {
-    const summary = buildSummary([claimWith("REFUTED"), claimWith("VERIFIED"), claimWith("INSUFFICIENT_DATA")]);
+    const summary = buildSummary([
+      claimWith("REFUTED"),
+      claimWith("VERIFIED"),
+      claimWith("INSUFFICIENT_DATA"),
+    ]);
 
     expect(summary).toBe("3 claims: 1 stands, 1 overturned, 1 couldn't be checked");
   });

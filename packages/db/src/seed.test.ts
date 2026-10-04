@@ -62,7 +62,15 @@ describe("buildTagList", () => {
 
   test("contains the slugs the API tests rely on", () => {
     const slugs = tags.map((tag) => tag.slug);
-    for (const slug of ["arsenal", "chelsea", "premier-league", "bayern-munich", "atletico-madrid", "inter-milan", "paris-saint-germain"]) {
+    for (const slug of [
+      "arsenal",
+      "chelsea",
+      "premier-league",
+      "bayern-munich",
+      "atletico-madrid",
+      "inter-milan",
+      "paris-saint-germain",
+    ]) {
       expect(slugs).toContain(slug);
     }
   });

@@ -1,10 +1,10 @@
-import { finishReviewComplete, finishReviewFailed, recordAiCall, startReview } from "@varroom/db";
 import type { FinishedClaim, FinishedEvidence } from "@varroom/db";
-import { PipelineError, ReviewStoppedError } from "./types.ts";
-import type { AiCallRecord, ClaimResult } from "./types.ts";
-import { runPipeline } from "./pipeline.ts";
+import { finishReviewComplete, finishReviewFailed, recordAiCall, startReview } from "@varroom/db";
 import type { EvidenceEntry, PipelineOptions, PipelineOutput } from "./pipeline.ts";
+import { runPipeline } from "./pipeline.ts";
 import { buildSummary } from "./summary.ts";
+import type { AiCallRecord, ClaimResult } from "./types.ts";
+import { PipelineError, ReviewStoppedError } from "./types.ts";
 
 // the agent pipeline's entry point. the caller (api or cli) creates the review row,
 // then runReview runs the agents on it and saves the result
@@ -38,7 +38,11 @@ export function failureReasonFor(err: unknown): string {
 // then saves claims, evidence and score in one go. returns null when the review
 // wasn't QUEUED anymore (already ended or deleted). on a pipeline error the review
 // is marked FAILED and the error is thrown again
-export async function runReview(reviewId: string, text: string, options: PipelineOptions = {}): Promise<ReviewRunResult | null> {
+export async function runReview(
+  reviewId: string,
+  text: string,
+  options: PipelineOptions = {},
+): Promise<ReviewRunResult | null> {
   const started = await startReview(reviewId);
   if (!started) {
     return null;
@@ -157,7 +161,8 @@ function toFinishedClaims(claims: ClaimResult[]): FinishedClaim[] {
   const rows: FinishedClaim[] = [];
   for (const claim of claims) {
     // untestable claims are never judged, so they stay PENDING in the db
-    let verdict: "PENDING" | "VERIFIED" | "PARTIALLY_TRUE" | "REFUTED" | "INSUFFICIENT_DATA" = "PENDING";
+    let verdict: "PENDING" | "VERIFIED" | "PARTIALLY_TRUE" | "REFUTED" | "INSUFFICIENT_DATA" =
+      "PENDING";
     if (claim.verdict !== "UNTESTABLE") {
       verdict = claim.verdict;
     }
@@ -176,7 +181,7 @@ function toFinishedClaims(claims: ClaimResult[]): FinishedClaim[] {
   return rows;
 }
 
-export { PipelineError, ReviewStoppedError } from "./types.ts";
-export { setupTracing } from "./telemetry.ts";
 export type { AiCallFn, PipelineOptions, RunAgentFn, SearchWebFn } from "./pipeline.ts";
+export { setupTracing } from "./telemetry.ts";
 export type { AgentReply, AiCallRecord, SearchReply, TokenUsage, WebSource } from "./types.ts";
+export { PipelineError, ReviewStoppedError } from "./types.ts";

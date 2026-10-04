@@ -1,7 +1,7 @@
-import { maybeSetOtelProviders } from "@google/adk";
 import type { OTelHooks } from "@google/adk";
-import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { maybeSetOtelProviders } from "@google/adk";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 
 // Optional export of ADK's traces to Langfuse, a hosted UI for looking at
 // agent runs. ADK already records OpenTelemetry spans (one per agent run and
@@ -117,7 +117,10 @@ export function onlyAdkSpans(next: SpanProcessor): SpanProcessor {
 // exits, because the batch goes out every few seconds and a finished process
 // would drop it. Gives up after timeoutMs so a slow Langfuse can't hang the
 // cli, and never throws. Does nothing while tracing is off.
-export async function flushTracing(timeoutMs: number = 5000, processor: SpanProcessor | null = exportProcessor): Promise<void> {
+export async function flushTracing(
+  timeoutMs: number = 5000,
+  processor: SpanProcessor | null = exportProcessor,
+): Promise<void> {
   if (processor === null) {
     return;
   }
@@ -200,7 +203,10 @@ export function reviewSessionTagger(): SpanProcessor {
 // Turns on the Langfuse export when both keys are set. Call it once, when the
 // process starts. Returns true when the export is on, false when it stays off.
 // It never throws: tracing is optional, so a bad setting only logs a line.
-export function setupTracing(env: TracingEnv = process.env, setProviders: SetProvidersFn = maybeSetOtelProviders): boolean {
+export function setupTracing(
+  env: TracingEnv = process.env,
+  setProviders: SetProvidersFn = maybeSetOtelProviders,
+): boolean {
   try {
     const config = langfuseExportConfig(env);
     if (config === null) {

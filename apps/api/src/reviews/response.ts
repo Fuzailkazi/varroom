@@ -1,6 +1,11 @@
-import type { ReviewDetailClaim, ReviewDetailEvidence, ReviewDetailRow, ReviewStateRow } from "@varroom/db";
-import { ReviewResponse } from "@varroom/shared";
+import type {
+  ReviewDetailClaim,
+  ReviewDetailEvidence,
+  ReviewDetailRow,
+  ReviewStateRow,
+} from "@varroom/db";
 import type { FailureCategory, ReviewClaim, ReviewEvidence, ReviewFailure } from "@varroom/shared";
+import { ReviewResponse } from "@varroom/shared";
 
 // turns review rows into what the public sees. raw failure text, the requester
 // and raw search errors never leave this file
@@ -128,7 +133,13 @@ function toIso(date: Date | null): string | null {
 }
 
 // the verdicts and entities the api shows for a claim
-type PublicVerdict = "PENDING" | "VERIFIED" | "PARTIALLY_TRUE" | "REFUTED" | "INSUFFICIENT_DATA" | "UNTESTABLE";
+type PublicVerdict =
+  | "PENDING"
+  | "VERIFIED"
+  | "PARTIALLY_TRUE"
+  | "REFUTED"
+  | "INSUFFICIENT_DATA"
+  | "UNTESTABLE";
 type PublicEntities = { player: string; positionA: string; positionB?: string };
 
 function toClaim(claim: ReviewDetailClaim): ReviewClaim {

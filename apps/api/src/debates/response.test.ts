@@ -30,7 +30,11 @@ function fakeRow(changes: Partial<DebateRow> = {}): DebateRow {
 }
 
 function tagLink(slug: string, name: string, kind: "TEAM" | "LEAGUE") {
-  return { debateId: "280c06dd-a9f8-41a7-9151-d348a6a7e295", tagId: 1, tag: { id: 1, slug: slug, name: name, kind: kind } };
+  return {
+    debateId: "280c06dd-a9f8-41a7-9151-d348a6a7e295",
+    tagId: 1,
+    tag: { id: 1, slug: slug, name: name, kind: kind },
+  };
 }
 
 describe("toDebateResponse", () => {
@@ -50,23 +54,39 @@ describe("toDebateResponse", () => {
 
   test("shows the author with their display username and badge", () => {
     const debate = toDebateResponse(fakeRow(), undefined);
-    expect(debate.author).toEqual({ username: "jude_fan", displayUsername: "Jude_Fan", displayName: "Jude", badge: "SPECTATOR" });
+    expect(debate.author).toEqual({
+      username: "jude_fan",
+      displayUsername: "Jude_Fan",
+      displayName: "Jude",
+      badge: "SPECTATOR",
+    });
   });
 
   test("falls back to the username when there is no display username, like /api/me", () => {
-    const row = fakeRow({ author: { username: "jude_fan", displayUsername: null, name: "Jude", badge: "CHIEF_VAR" } });
+    const row = fakeRow({
+      author: { username: "jude_fan", displayUsername: null, name: "Jude", badge: "CHIEF_VAR" },
+    });
     const debate = toDebateResponse(row, undefined);
     expect(debate.author.displayUsername).toBe("jude_fan");
   });
 
   test("labels a deleted account as 'deleted user' with null fields", () => {
     const debate = toDebateResponse(fakeRow({ authorId: null, author: null }), undefined);
-    expect(debate.author).toEqual({ username: null, displayUsername: null, displayName: "deleted user", badge: null });
+    expect(debate.author).toEqual({
+      username: null,
+      displayUsername: null,
+      displayName: "deleted user",
+      badge: null,
+    });
   });
 
   test("lists tags leagues first, then teams, each A to Z", () => {
     const row = fakeRow({
-      tags: [tagLink("chelsea", "Chelsea", "TEAM"), tagLink("premier-league", "Premier League", "LEAGUE"), tagLink("arsenal", "Arsenal", "TEAM")],
+      tags: [
+        tagLink("chelsea", "Chelsea", "TEAM"),
+        tagLink("premier-league", "Premier League", "LEAGUE"),
+        tagLink("arsenal", "Arsenal", "TEAM"),
+      ],
     });
     const debate = toDebateResponse(row, undefined);
     expect(debate.tags.map((tag) => tag.slug)).toEqual(["premier-league", "arsenal", "chelsea"]);
@@ -74,7 +94,17 @@ describe("toDebateResponse", () => {
 
   test("a QUEUED review shows with null decision, score, summary and completedAt", () => {
     const row = fakeRow({
-      reviews: [{ id: "rev_1", status: "QUEUED", decision: null, credibilityScore: null, summary: null, createdAt: CREATED, completedAt: null }],
+      reviews: [
+        {
+          id: "rev_1",
+          status: "QUEUED",
+          decision: null,
+          credibilityScore: null,
+          summary: null,
+          createdAt: CREATED,
+          completedAt: null,
+        },
+      ],
     });
     const debate = toDebateResponse(row, undefined);
     expect(debate.latestReview).toEqual({
@@ -91,7 +121,17 @@ describe("toDebateResponse", () => {
   test("a COMPLETE review shows its decision, score, summary and completion time", () => {
     const done = new Date("2026-09-24T16:05:00.000Z");
     const row = fakeRow({
-      reviews: [{ id: "rev_2", status: "COMPLETE", decision: "OVERTURNED", credibilityScore: 31, summary: "Nope.", createdAt: CREATED, completedAt: done }],
+      reviews: [
+        {
+          id: "rev_2",
+          status: "COMPLETE",
+          decision: "OVERTURNED",
+          credibilityScore: 31,
+          summary: "Nope.",
+          createdAt: CREATED,
+          completedAt: done,
+        },
+      ],
     });
     const debate = toDebateResponse(row, undefined);
     expect(debate.latestReview?.decision).toBe("OVERTURNED");
@@ -117,16 +157,36 @@ describe("myVote", () => {
 // shared by debates and comments
 describe("toAuthorResponse", () => {
   test("maps a live author, keeping the display username as typed", () => {
-    const author = toAuthorResponse({ username: "jude_fan", displayUsername: "Jude_Fan", name: "Jude", badge: "ASSISTANT_REF" });
-    expect(author).toEqual({ username: "jude_fan", displayUsername: "Jude_Fan", displayName: "Jude", badge: "ASSISTANT_REF" });
+    const author = toAuthorResponse({
+      username: "jude_fan",
+      displayUsername: "Jude_Fan",
+      name: "Jude",
+      badge: "ASSISTANT_REF",
+    });
+    expect(author).toEqual({
+      username: "jude_fan",
+      displayUsername: "Jude_Fan",
+      displayName: "Jude",
+      badge: "ASSISTANT_REF",
+    });
   });
 
   test("falls back to the username when there is no display username", () => {
-    const author = toAuthorResponse({ username: "jude_fan", displayUsername: null, name: "Jude", badge: "SPECTATOR" });
+    const author = toAuthorResponse({
+      username: "jude_fan",
+      displayUsername: null,
+      name: "Jude",
+      badge: "SPECTATOR",
+    });
     expect(author.displayUsername).toBe("jude_fan");
   });
 
   test("null means the account was deleted", () => {
-    expect(toAuthorResponse(null)).toEqual({ username: null, displayUsername: null, displayName: "deleted user", badge: null });
+    expect(toAuthorResponse(null)).toEqual({
+      username: null,
+      displayUsername: null,
+      displayName: "deleted user",
+      badge: null,
+    });
   });
 });

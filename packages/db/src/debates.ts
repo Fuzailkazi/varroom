@@ -103,7 +103,10 @@ export function getDebatesByIds(ids: string[]) {
 export type DebateRow = Awaited<ReturnType<typeof getDebatesByIds>>[number];
 
 // debateId -> vote value for this user. no entry = no vote
-export async function getVotesForUser(userId: string, debateIds: string[]): Promise<Map<string, number>> {
+export async function getVotesForUser(
+  userId: string,
+  debateIds: string[],
+): Promise<Map<string, number>> {
   const votes = await prisma.debateVote.findMany({
     where: {
       userId: userId,
@@ -148,9 +151,13 @@ export async function listDebateIds(options: ListDebateIdsOptions): Promise<stri
 
   let rows: { id: string }[];
   if (options.sort === "top") {
-    rows = await prisma.$queryRawTyped(listTopDebateIds(category, tag, author, cursorId, options.limit));
+    rows = await prisma.$queryRawTyped(
+      listTopDebateIds(category, tag, author, cursorId, options.limit),
+    );
   } else {
-    rows = await prisma.$queryRawTyped(listNewDebateIds(category, tag, author, cursorId, options.limit));
+    rows = await prisma.$queryRawTyped(
+      listNewDebateIds(category, tag, author, cursorId, options.limit),
+    );
   }
 
   const ids: string[] = [];
@@ -163,7 +170,9 @@ export async function listDebateIds(options: ListDebateIdsOptions): Promise<stri
 // deleting
 
 // found: false = no such debate. authorId null = author deleted their account
-export async function getDebateAuthor(id: string): Promise<{ found: boolean; authorId: string | null }> {
+export async function getDebateAuthor(
+  id: string,
+): Promise<{ found: boolean; authorId: string | null }> {
   const debate = await prisma.debate.findUnique({
     where: { id: id },
     select: { authorId: true },

@@ -1,22 +1,22 @@
-import express from "express";
-import type { NextFunction, Request, Response } from "express";
-import { toNodeHandler } from "better-auth/node";
 import { checkDatabase, getUserProfile } from "@varroom/db";
 import { HealthResponse, MeResponse } from "@varroom/shared";
+import { toNodeHandler } from "better-auth/node";
+import type { NextFunction, Request, RequestHandler, Response } from "express";
+import express from "express";
 import { createAdminRouter } from "./admin/routes.ts";
 import { createAuth } from "./auth/auth.ts";
 import { createSendEmail } from "./auth/email.ts";
 import { requireSession, requireVerified } from "./auth/guards.ts";
 import { createCommentsRouter, createDebateCommentsRouter } from "./comments/routes.ts";
 import { createDebatesRouter, listTagsHandler } from "./debates/routes.ts";
-import { createReviewsRouter, createStartReviewRouter } from "./reviews/routes.ts";
-import { createReviewRunner } from "./reviews/runner.ts";
-import type { ReviewRunnerOptions } from "./reviews/runner.ts";
 import type { Env } from "./env.ts";
 import { errorHandler, sendError } from "./errors.ts";
+import { createReviewsRouter, createStartReviewRouter } from "./reviews/routes.ts";
+import type { ReviewRunnerOptions } from "./reviews/runner.ts";
+import { createReviewRunner } from "./reviews/runner.ts";
 import { getTrustedOrigins, requireTrustedOrigin } from "./security/origin.ts";
-import { DEFAULT_RATE_LIMITS } from "./security/rateLimit.ts";
 import type { RateLimits } from "./security/rateLimit.ts";
+import { DEFAULT_RATE_LIMITS } from "./security/rateLimit.ts";
 
 // Builds the Express app without starting it, so tests can run it on a
 // random port. server.ts is the only file that calls listen().
@@ -44,7 +44,7 @@ export function createApp(
   // better auth reads x-forwarded-for as is, so a client could spoof it and dodge the
   // rate limit. replace it with express's req.ip, which honours trust proxy above
   app.use("/api/auth", useTrustedIp);
-  app.all("/api/auth/*splat", toNodeHandler(auth));
+  app.all("/api/auth/*splat", toNodeHandler(auth) as unknown as RequestHandler);
 
   // csrf + content type guard for our write routes. before express.json() so bad requests never get parsed
   app.use("/api", requireTrustedOrigin(getTrustedOrigins(env)));
@@ -58,7 +58,10 @@ export function createApp(
   // debates + tags
   app.use("/api/debates/:id/comments", createDebateCommentsRouter());
   // the fan cap and the daily gemini budget, read from the env
-  const usageLimits = { aiDailyCallLimit: env.aiDailyCallLimit, reviewDailyLimit: env.reviewDailyLimit };
+  const usageLimits = {
+    aiDailyCallLimit: env.aiDailyCallLimit,
+    reviewDailyLimit: env.reviewDailyLimit,
+  };
   app.use("/api/debates/:id/reviews", createStartReviewRouter(reviewRunner, usageLimits));
   app.use("/api/reviews", createReviewsRouter(reviewRunner, usageLimits, rateLimits));
   app.use("/api/debates", createDebatesRouter());

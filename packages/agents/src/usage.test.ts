@@ -5,13 +5,21 @@ import { toTokenUsage } from "./usage.ts";
 
 describe("toTokenUsage", () => {
   test("maps prompt, candidates and thoughts to input, output and thinking", () => {
-    const usage = toTokenUsage({ promptTokenCount: 120, candidatesTokenCount: 45, thoughtsTokenCount: 30 });
+    const usage = toTokenUsage({
+      promptTokenCount: 120,
+      candidatesTokenCount: 45,
+      thoughtsTokenCount: 30,
+    });
 
     expect(usage).toEqual({ inputTokens: 120, outputTokens: 45, thinkingTokens: 30 });
   });
 
   test("adds the tool use prompt (e.g. google search) to the input", () => {
-    const usage = toTokenUsage({ promptTokenCount: 100, toolUsePromptTokenCount: 250, candidatesTokenCount: 10 });
+    const usage = toTokenUsage({
+      promptTokenCount: 100,
+      toolUsePromptTokenCount: 250,
+      candidatesTokenCount: 10,
+    });
 
     expect(usage?.inputTokens).toBe(350);
   });

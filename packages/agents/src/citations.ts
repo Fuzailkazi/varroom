@@ -24,7 +24,7 @@ export type CitationCheckResult =
 export function validateCitations(
   citedLabels: string[],
   claimOrder: number,
-  evidence: EvidenceRecord[]
+  evidence: EvidenceRecord[],
 ): CitationCheckResult {
   if (citedLabels.length === 0) {
     return { ok: false, invalidLabels: [] };

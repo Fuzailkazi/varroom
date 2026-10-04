@@ -1,8 +1,8 @@
+import { prisma } from "@varroom/db/client";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { username } from "better-auth/plugins";
-import { prisma } from "@varroom/db/client";
 import type { Env } from "../env.ts";
 import { getTrustedOrigins } from "../security/origin.ts";
 import type { SendEmail } from "./email.ts";
@@ -15,7 +15,16 @@ const ONE_DAY_IN_SECONDS = 60 * 60 * 24;
 
 // username rules
 
-const RESERVED_USERNAMES = ["admin", "var", "varroom", "deleted", "moderator", "support", "api", "system"];
+const RESERVED_USERNAMES = [
+  "admin",
+  "var",
+  "varroom",
+  "deleted",
+  "moderator",
+  "support",
+  "api",
+  "system",
+];
 
 // Only letters, numbers and underscores. The length (3 to 20) is
 // checked by the username plugin itself, see createAuth below.
@@ -66,7 +75,10 @@ function checkSignUp(body: Record<string, unknown>) {
 function checkUpdateUser(body: Record<string, unknown>) {
   // A username can never be changed.
   if ("username" in body || "displayUsername" in body) {
-    throw new APIError("BAD_REQUEST", { code: "USERNAME_IS_IMMUTABLE", message: "Usernames can't be changed." });
+    throw new APIError("BAD_REQUEST", {
+      code: "USERNAME_IS_IMMUTABLE",
+      message: "Usernames can't be changed.",
+    });
   }
 
   if ("name" in body) {
@@ -153,7 +165,11 @@ export function createAuth(env: Env, sendEmail: SendEmail) {
       // request sends one anyway, Better Auth uses the default instead.
       additionalFields: {
         role: { type: ["USER", "ADMIN"], defaultValue: "USER", input: false },
-        badge: { type: ["SPECTATOR", "ASSISTANT_REF", "CHIEF_VAR"], defaultValue: "SPECTATOR", input: false },
+        badge: {
+          type: ["SPECTATOR", "ASSISTANT_REF", "CHIEF_VAR"],
+          defaultValue: "SPECTATOR",
+          input: false,
+        },
         tacticalIqScore: { type: "number", defaultValue: 50, input: false },
       },
       // Fans can delete their account (password rule in checkDeleteUser).

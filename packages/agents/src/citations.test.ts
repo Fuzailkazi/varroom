@@ -1,6 +1,6 @@
-import { expect, test, describe } from "bun:test";
-import { validateCitations } from "./citations.ts";
+import { describe, expect, test } from "bun:test";
 import type { EvidenceRecord } from "./citations.ts";
+import { validateCitations } from "./citations.ts";
 
 // evidence rows for claim 1 and claim 2
 const ev: EvidenceRecord[] = [

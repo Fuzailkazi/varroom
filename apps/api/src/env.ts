@@ -1,22 +1,28 @@
-import { z } from "zod";
-import { readUsageLimits } from "@varroom/shared";
 import type { UsageLimits } from "@varroom/shared";
+import { readUsageLimits } from "@varroom/shared";
+import { z } from "zod";
 
 // app environment variables - validated at startup
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
   DATABASE_URL: z
-    .string({ error: "DATABASE_URL is missing. Copy .env.example to .env and set the Neon pooled URL." })
+    .string({
+      error: "DATABASE_URL is missing. Copy .env.example to .env and set the Neon pooled URL.",
+    })
     .startsWith("postgres", { error: "DATABASE_URL must be a postgres connection string." }),
 
   PORT: z.coerce.number().int().positive().default(3000),
 
   // Sign in.
   BETTER_AUTH_SECRET: z
-    .string({ error: "BETTER_AUTH_SECRET is missing. Generate one with `openssl rand -base64 32`." })
+    .string({
+      error: "BETTER_AUTH_SECRET is missing. Generate one with `openssl rand -base64 32`.",
+    })
     .min(32, { error: "BETTER_AUTH_SECRET must be at least 32 characters." }),
-  BETTER_AUTH_URL: z.url({ error: "BETTER_AUTH_URL must be the API's base URL, e.g. http://localhost:3000." }),
+  BETTER_AUTH_URL: z.url({
+    error: "BETTER_AUTH_URL must be the API's base URL, e.g. http://localhost:3000.",
+  }),
 
   // Only needed in production (see the check below).
   RESEND_API_KEY: z.string().optional(),
