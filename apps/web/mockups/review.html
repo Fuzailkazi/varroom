@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VAR Room — Review</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Schibsted+Grotesk:wght@400..700&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --lime:        oklch(0.88 0.20 124);
+      --lime-hover:  oklch(0.84 0.20 124);
+      --on-lime:     oklch(0.21 0.012 65);
+
+      --paper:   oklch(0.975 0.006 95);
+      --surface: oklch(1 0 0);
+      --sunken:  oklch(0.955 0.006 95);
+
+      --ink:     oklch(0.21 0.012 65);
+      --ink-2:   oklch(0.44 0.010 65);
+      --ink-3:   oklch(0.60 0.008 65);
+
+      --line:    oklch(0.90 0.006 80);
+
+      --success:      oklch(0.72 0.17 150);
+      --success-soft: oklch(0.95 0.06 150);
+      --warning:      oklch(0.80 0.16 78);
+      --warning-soft: oklch(0.96 0.07 78);
+      --danger:       oklch(0.62 0.21 25);
+      --danger-soft:  oklch(0.95 0.05 25);
+      --violet:       oklch(0.53 0.23 286);
+      --violet-soft:  oklch(0.95 0.04 286);
+
+      --border-w:      1.5px;
+      --border-w-bold: 2.5px;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-pill: 999px;
+
+      --shadow-hard:    3px 3px 0 var(--ink);
+      --shadow-hard-lg: 5px 5px 0 var(--ink);
+
+      --font-display: 'Bricolage Grotesque', sans-serif;
+      --font-sans: 'Schibsted Grotesk', -apple-system, sans-serif;
+      --font-mono: 'Space Mono', monospace;
+    }
+
+    [data-theme="dark"], html.dark {
+      --paper:   oklch(0.19 0.008 70);
+      --surface: oklch(0.235 0.009 70);
+      --sunken:  oklch(0.165 0.008 70);
+
+      --ink:     oklch(0.96 0.006 90);
+      --ink-2:   oklch(0.76 0.007 90);
+      --ink-3:   oklch(0.60 0.008 80);
+
+      --line:    oklch(0.32 0.009 75);
+
+      --success-soft: oklch(0.33 0.07 150);
+      --warning-soft: oklch(0.34 0.07 78);
+      --danger-soft:  oklch(0.33 0.07 25);
+      --violet-soft:  oklch(0.33 0.09 286);
+
+      --shadow-hard:    3px 3px 0 var(--ink);
+      --shadow-hard-lg: 5px 5px 0 var(--ink);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--paper);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.5;
+      padding: 16px;
+      transition: background-color 0.2s ease, color 0.2s ease;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .wrap {
+      max-width: 680px;
+      margin: 0 auto;
+      padding-bottom: 60px;
+    }
+
+    /* Minimal Nav */
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      margin-bottom: 24px;
+      border-bottom: var(--border-w) solid var(--line);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+
+    .nav-links a:hover { color: var(--ink); }
+
+    .theme-btn {
+      background: var(--surface);
+      border: var(--border-w) solid var(--ink);
+      padding: 5px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 2px 2px 0 var(--ink);
+    }
+
+    /* Card */
+    .card {
+      background: var(--surface);
+      border: var(--border-w) solid var(--ink);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-hard);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    /* Button */
+    .btn {
+      font-family: var(--font-sans);
+      font-weight: 700;
+      font-size: 15px;
+      padding: 12px 22px;
+      border-radius: var(--radius-pill);
+      border: var(--border-w) solid var(--ink);
+      box-shadow: var(--shadow-hard);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      user-select: none;
+      transition: transform 0.1s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.1s;
+    }
+
+    .btn:hover {
+      box-shadow: var(--shadow-hard-lg);
+      transform: translate(-1px, -1px);
+    }
+
+    .btn:active {
+      box-shadow: 1px 1px 0 var(--ink);
+      transform: translate(2px, 2px);
+    }
+
+    .btn-lime { background: var(--lime); color: var(--on-lime); }
+    .btn-lime:hover { background: var(--lime-hover); }
+    .btn-white { background: var(--surface); color: var(--ink); }
+    .btn-white:hover { background: var(--sunken); }
+
+    /* Take statement */
+    .take-box {
+      margin-bottom: 24px;
+    }
+
+    .take-heading {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: clamp(22px, 3.8vw, 30px);
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+
+    .take-meta {
+      font-size: 13px;
+      color: var(--ink-3);
+    }
+
+    /* RUNNING STATE: One Calm Progress Line */
+    .running-box {
+      padding: 32px 24px;
+      text-align: center;
+    }
+
+    .progress-text {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 20px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .pulse-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--lime);
+      border: 1.5px solid var(--ink);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.4); opacity: 0.6; }
+    }
+
+    .calm-progress-bar {
+      width: 100%;
+      height: 8px;
+      background: var(--sunken);
+      border: var(--border-w) solid var(--ink);
+      border-radius: var(--radius-pill);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .calm-progress-fill {
+      width: 60%;
+      height: 100%;
+      background: var(--lime);
+      border-radius: var(--radius-pill);
+      animation: progressMove 2.4s ease-in-out infinite alternate;
+    }
+
+    @keyframes progressMove {
+      0% { width: 35%; }
+      100% { width: 75%; }
+    }
+
+    .calm-subtext {
+      font-size: 14px;
+      color: var(--ink-2);
+    }
+
+    /* DONE STATE: Verdict Stamp & Score FIRST */
+    .verdict-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 14px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .stamp {
+      display: inline-flex;
+      align-items: center;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 16px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      padding: 7px 16px;
+      border-radius: var(--radius-pill);
+      border: var(--border-w-bold) solid var(--ink);
+      box-shadow: var(--shadow-hard);
+    }
+
+    .stamp-overturned {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border-color: var(--danger);
+      transform: rotate(1.5deg);
+    }
+
+    .stamp-stands {
+      background: var(--lime);
+      color: var(--on-lime);
+      transform: rotate(-1.5deg);
+    }
+
+    .score-display {
+      text-align: right;
+    }
+
+    .score-num {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 42px;
+      line-height: 0.9;
+      letter-spacing: -0.03em;
+    }
+
+    .score-out {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--ink-3);
+    }
+
+    .verdict-takeaway {
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.35;
+      margin-bottom: 6px;
+    }
+
+    .verdict-sub {
+      font-size: 15px;
+      color: var(--ink-2);
+      line-height: 1.45;
+    }
+
+    /* CLAIMS AS A SIMPLE LIST */
+    .claims-section-title {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 20px;
+      margin-bottom: 14px;
+      letter-spacing: -0.01em;
+    }
+
+    .claim-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .claim-item {
+      background: var(--surface);
+      border: var(--border-w) solid var(--ink);
+      border-radius: var(--radius-md);
+      box-shadow: 2px 2px 0 var(--ink);
+      padding: 16px 18px;
+    }
+
+    .claim-item.ruling-bad {
+      border-color: var(--danger);
+      background: var(--danger-soft);
+    }
+
+    .claim-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 6px;
+      gap: 10px;
+    }
+
+    .claim-text {
+      font-weight: 700;
+      font-size: 16px;
+      line-height: 1.35;
+    }
+
+    .ruling-pill {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      border: var(--border-w) solid var(--ink);
+      white-space: nowrap;
+    }
+
+    .ruling-pill.bad {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .ruling-pill.good {
+      background: var(--lime);
+      color: var(--on-lime);
+    }
+
+    .ruling-pill.neutral {
+      background: var(--warning-soft);
+      color: var(--warning);
+      border-color: var(--warning);
+    }
+
+    .claim-why {
+      font-size: 14px;
+      color: var(--ink-2);
+      line-height: 1.45;
+      margin-bottom: 8px;
+    }
+
+    /* Toggle for evidence (E1, E2 tucked here) */
+    .sources-toggle {
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      user-select: none;
+    }
+
+    .sources-toggle:hover {
+      text-decoration: underline;
+    }
+
+    .sources-drawer {
+      display: none;
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: var(--sunken);
+      border: 1px solid var(--ink);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      color: var(--ink-2);
+      line-height: 1.4;
+    }
+
+    .sources-drawer.open {
+      display: block;
+    }
+
+    .e-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--surface);
+      border: 1px solid var(--ink);
+      color: var(--ink);
+      margin-right: 6px;
+    }
+
+    /* State Switcher for Owner Demo */
+    .demo-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 20px;
+      padding: 8px 12px;
+      background: var(--sunken);
+      border: 1px dashed var(--ink-3);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-family: var(--font-mono);
+    }
+
+    .demo-btn {
+      background: var(--surface);
+      border: 1px solid var(--ink);
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    
+    <!-- MINIMAL NAV -->
+    <nav class="nav">
+      <a href="index.html" class="brand">
+        VAR ROOM
+      </a>
+      <div class="nav-links">
+        <a href="index.html">← Back to take input</a>
+        <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙 DARK</button>
+      </div>
+    </nav>
+
+    <!-- STATE SWITCHER (FOR OWNER DEMO) -->
+    <div class="demo-bar">
+      <span>STATE DEMO:</span>
+      <div style="display:flex; gap:6px;">
+        <button class="demo-btn" onclick="setScreenState('running')">1. Running</button>
+        <button class="demo-btn" onclick="setScreenState('overturned')">2. Done (Overturned)</button>
+        <button class="demo-btn" onclick="setScreenState('stands')">3. Done (Stands)</button>
+      </div>
+    </div>
+
+    <!-- TAKE STATEMENT -->
+    <div class="take-box">
+      <h1 class="take-heading" id="takeText">
+        “Bellingham is twice the player when deployed as an 8 rather than an isolated false 9.”
+      </h1>
+      <div class="take-meta">
+        Submitted by @tikitaka · Real Madrid vs Real Betis (GW 24)
+      </div>
+    </div>
+
+    <!-- 1. WHILE RUNNING: ONE CALM PROGRESS LINE (NO TECH NOISE) -->
+    <div id="stateRunning" class="card running-box" style="display:none;">
+      <div class="progress-text">
+        <span class="pulse-dot"></span>
+        <span id="progressLine">Splitting your take into claims... Checking claim 2 of 4</span>
+      </div>
+      <div class="calm-progress-bar">
+        <div class="calm-progress-fill"></div>
+      </div>
+      <div class="calm-subtext">
+        Give the ref a moment. Matching your statements against official match event logs.
+      </div>
+    </div>
+
+    <!-- 2. WHEN DONE: VERDICT STAMP & SCORE FIRST -->
+    <div id="stateDone">
+      
+      <!-- HERO VERDICT CARD -->
+      <div class="card" id="verdictCard">
+        <div class="verdict-header">
+          <span class="stamp stamp-overturned" id="verdictStamp">OVERTURNED</span>
+          <div class="score-display">
+            <div class="score-num" id="scoreNum" style="color:var(--danger);">24</div>
+            <div class="score-out">/ 100 CREDIBILITY</div>
+          </div>
+        </div>
+
+        <div class="verdict-takeaway" id="verdictTitle">
+          Sent off for simulated xG.
+        </div>
+        <div class="verdict-sub" id="verdictDesc">
+          We checked every progressive delivery. Bellingham's creative shot assists were 63% lower from deep than between the centre-backs. The data directly refutes your thesis.
+        </div>
+      </div>
+
+      <!-- CLAIMS AS A SIMPLE LIST -->
+      <section>
+        <h2 class="claims-section-title">What the referee checked</h2>
+        
+        <div class="claim-list" id="claimsContainer">
+          
+          <!-- CLAIM 1 -->
+          <div class="claim-item ruling-bad" id="claimCard1">
+            <div class="claim-top">
+              <div class="claim-text">Produces higher expected assists (xA) as an 8 than as a false 9</div>
+              <span class="ruling-pill bad" id="pill1">Contradicted</span>
+            </div>
+            <div class="claim-why" id="why1">
+              His central 8 deployment generated 0.14 xA vs 0.38 xA as a false 9.
+            </div>
+            <button class="sources-toggle" onclick="toggleSources('sources1')">
+              <span id="arrow1">▶</span> Show sources
+            </button>
+            <div class="sources-drawer" id="sources1">
+              <div><span class="e-tag">E1</span> 68' Opta Event #34: 0.14 xA across 6 appearances.</div>
+              <div style="margin-top:4px;"><span class="e-tag">E2</span> 14 UCL matches: false 9 output averaged 0.38 xA.</div>
+            </div>
+          </div>
+
+          <!-- CLAIM 2 -->
+          <div class="claim-item" id="claimCard2">
+            <div class="claim-top">
+              <div class="claim-text">Generates 2.4+ progressive passes per 90 from central midfield</div>
+              <span class="ruling-pill good">Confirmed</span>
+            </div>
+            <div class="claim-why">
+              Opta measured 2.48 forward deliveries per 90 with 93.4% accuracy under pressure.
+            </div>
+            <button class="sources-toggle" onclick="toggleSources('sources2')">
+              <span id="arrow2">▶</span> Show sources
+            </button>
+            <div class="sources-drawer" id="sources2">
+              <div><span class="e-tag">E3</span> 34' tracking telemetry confirmed 2.48 progressive passes per 90.</div>
+            </div>
+          </div>
+
+          <!-- CLAIM 3 -->
+          <div class="claim-item" id="claimCard3">
+            <div class="claim-top">
+              <div class="claim-text">Central recovery tracking maintains defensive box solidity</div>
+              <span class="ruling-pill neutral">Inconclusive</span>
+            </div>
+            <div class="claim-why">
+              Two recovery tackles logged, but occluded camera angles prevent 3D Hawkeye line confirmation.
+            </div>
+            <button class="sources-toggle" onclick="toggleSources('sources3')">
+              <span id="arrow3">▶</span> Show sources
+            </button>
+            <div class="sources-drawer" id="sources3">
+              <div><span class="e-tag">E4</span> Camera 3B occluded by North Stand flag. Evidence contradictory.</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ONE PRIMARY ACTION -->
+        <div style="text-align:center;">
+          <a href="index.html" class="btn btn-lime" style="width:100%; max-width:320px;">
+            Check another take →
+          </a>
+        </div>
+      </section>
+
+    </div>
+
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      const btn = document.getElementById('themeBtn');
+      if (isDark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        btn.textContent = '☀️ LIGHT';
+      } else {
+        document.documentElement.setAttribute('data-theme', 'light');
+        btn.textContent = '🌙 DARK';
+      }
+    }
+
+    function toggleSources(id) {
+      const drawer = document.getElementById(id);
+      const isOpen = drawer.classList.toggle('open');
+      const arrowId = 'arrow' + id.replace('sources', '');
+      const arrow = document.getElementById(arrowId);
+      if (arrow) arrow.textContent = isOpen ? '▼' : '▶';
+    }
+
+    function setScreenState(state) {
+      const runningBox = document.getElementById('stateRunning');
+      const doneBox = document.getElementById('stateDone');
+      const stamp = document.getElementById('verdictStamp');
+      const score = document.getElementById('scoreNum');
+      const title = document.getElementById('verdictTitle');
+      const desc = document.getElementById('verdictDesc');
+
+      if (state === 'running') {
+        runningBox.style.display = 'block';
+        doneBox.style.display = 'none';
+      } else if (state === 'stands') {
+        runningBox.style.display = 'none';
+        doneBox.style.display = 'block';
+        stamp.className = 'stamp stamp-stands';
+        stamp.textContent = 'DECISION STANDS';
+        score.textContent = '92';
+        score.style.color = 'var(--on-lime)';
+        title.textContent = 'Group chat vindication granted.';
+        desc.textContent = 'We checked every single metric. Central progressive pass volume and defensive recovery stats corroborated your argument.';
+      } else {
+        runningBox.style.display = 'none';
+        doneBox.style.display = 'block';
+        stamp.className = 'stamp stamp-overturned';
+        stamp.textContent = 'OVERTURNED';
+        score.textContent = '24';
+        score.style.color = 'var(--danger)';
+        title.textContent = 'Sent off for simulated xG.';
+        desc.textContent = 'We checked every progressive delivery. Bellingham\'s creative shot assists were 63% lower from deep than between the centre-backs. The data directly refutes your thesis.';
+      }
+    }
+
+    // Check URL params
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('running') === 'true') {
+      setScreenState('running');
+      // Simulate completing in 3 seconds
+      setTimeout(() => {
+        setScreenState('overturned');
+      }, 3500);
+    } else {
+      setScreenState('overturned');
+    }
+  </script>
+</body>
+</html>
