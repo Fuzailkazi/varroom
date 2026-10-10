@@ -1,7 +1,7 @@
 import { expect, test, describe } from "bun:test";
 import { createEvent } from "@google/adk";
 import type { Event } from "@google/adk";
-import { readAgentEvents, runAttempts, runPipeline } from "./pipeline.ts";
+import { buildSearchQuery, isLowSampleEvidence, readAgentEvents, runAttempts, runPipeline } from "./pipeline.ts";
 import type { AttemptContext } from "./pipeline.ts";
 import { PipelineError, ReviewStoppedError } from "./types.ts";
 import type { RunAgentFn, SearchWebFn, EvidenceEntry } from "./pipeline.ts";
@@ -1153,5 +1153,166 @@ describe("readAgentEvents", () => {
 
     expect(runFinished).toBe(true);
     expect(result.text).toBe("first answer");
+  });
+});
+
+describe("buildSearchQuery and low sample evidence", () => {
+  test("builds tailored search queries for each claim type", () => {
+    const positional = {
+      order: 1,
+      claimText: "Bellingham is better as a 9 than an 8",
+      type: "POSITIONAL_ROLE" as const,
+      entities: { player: "Bellingham", positionA: "9", positionB: "8" },
+    };
+    expect(buildSearchQuery(positional)).toBe("Bellingham 9 vs 8 stats");
+
+    const comparison = {
+      order: 2,
+      claimText: "Haaland scores more per 90 than Mbappe",
+      type: "COMPARISON" as const,
+      entities: { playerA: "Haaland", playerB: "Mbappe", metric: "goals per 90" },
+    };
+    expect(buildSearchQuery(comparison)).toBe("Haaland vs Mbappe goals per 90 stats comparison");
+
+    const tactic = {
+      order: 3,
+      claimText: "Arsenal concede fewer shots than Man City",
+      type: "TEAM_TACTIC" as const,
+      entities: { team: "Arsenal", metric: "shots conceded per game" },
+    };
+    expect(buildSearchQuery(tactic)).toBe("Arsenal shots conceded per game");
+
+    const transfer = {
+      order: 4,
+      claimText: "Gyokeres fits Arsenal style",
+      type: "TRANSFER_FIT" as const,
+      entities: { player: "Gyokeres", team: "Arsenal" },
+    };
+    expect(buildSearchQuery(transfer)).toBe("Gyokeres Arsenal transfer fit stats analysis");
+  });
+
+  test("detects small sample signals in source titles and urls", () => {
+    expect(
+      isLowSampleEvidence({
+        sourceTitle: "Haaland early season small sample size stats",
+        sourceUrl: "https://theanalyst.com/article",
+      })
+    ).toBe(true);
+
+    expect(
+      isLowSampleEvidence({
+        sourceTitle: "Player limited minutes breakdown",
+        sourceUrl: "https://fbref.com/player",
+      })
+    ).toBe(true);
+
+    expect(
+      isLowSampleEvidence({
+        sourceTitle: "Premier League Season Overview",
+        sourceUrl: "https://bbc.com/sport/football",
+      })
+    ).toBe(false);
+  });
+});
+
+describe("runPipeline — wider claim types and sample sizes", () => {
+  test("processes COMPARISON and TEAM_TACTIC claims and scores them", async () => {
+    const moderator = {
+      claims: [
+        {
+          order: 1,
+          claimText: "Haaland scores more non-penalty goals per 90 than Mbappe",
+          type: "COMPARISON",
+          entities: { playerA: "Haaland", playerB: "Mbappe", metric: "non-penalty goals" },
+        },
+        {
+          order: 2,
+          claimText: "Arsenal concede fewer shots per game than Man City",
+          type: "TEAM_TACTIC",
+          entities: { team: "Arsenal", metric: "shots conceded" },
+        },
+      ],
+    };
+
+    const factChecker = {
+      verdicts: [
+        {
+          claimOrder: 1,
+          verdict: "VERIFIED",
+          reasoning: "Haaland leads in non-penalty scoring rate.",
+          citedLabels: ["E1"],
+        },
+        {
+          claimOrder: 2,
+          verdict: "PARTIALLY_TRUE",
+          reasoning: "Shot counts are close across recent seasons.",
+          citedLabels: ["E3"],
+        },
+      ],
+    };
+
+    const sources = [
+      { url: "https://understat.com/stats", title: "Understat Champions League", publishedAt: null },
+      { url: "https://fbref.com/stats", title: "FBref Premier League Defense", publishedAt: null },
+    ];
+
+    const result = await runPipeline("Haaland vs Mbappe debate", {
+      runAgentFn: makeRunAgentFn(moderator, factChecker),
+      searchWebFn: makeSearchFn(sources),
+    });
+
+    expect(result.claims).toHaveLength(2);
+    expect(result.claims[0]!.type).toBe("COMPARISON");
+    expect(result.claims[0]!.verdict).toBe("VERIFIED");
+    expect(result.claims[1]!.type).toBe("TEAM_TACTIC");
+    expect(result.claims[1]!.verdict).toBe("PARTIALLY_TRUE");
+    expect(result.score).toBe(75);
+    expect(result.decision).toBe("CONFIRMED");
+  });
+
+  test("lowers confidence when cited evidence has a small sample size warning", async () => {
+    const moderator = {
+      claims: [
+        {
+          order: 1,
+          claimText: "Endrick scores more per minute than Rodrygo",
+          type: "COMPARISON",
+          entities: { playerA: "Endrick", playerB: "Rodrygo" },
+        },
+      ],
+    };
+
+    const factChecker = {
+      verdicts: [
+        {
+          claimOrder: 1,
+          verdict: "VERIFIED",
+          reasoning: "High goal rate in limited minutes.",
+          citedLabels: ["E1", "E2"],
+        },
+      ],
+    };
+
+    const sources = [
+      {
+        url: "https://theathletic.com/article1",
+        title: "Endrick stats with small sample size warning",
+        publishedAt: null,
+      },
+      {
+        url: "https://espn.com/article2",
+        title: "Real Madrid bench efficiency",
+        publishedAt: null,
+      },
+    ];
+
+    const result = await runPipeline("Endrick super sub impact", {
+      runAgentFn: makeRunAgentFn(moderator, factChecker),
+      searchWebFn: makeSearchFn(sources),
+    });
+
+    expect(result.claims[0]!.verdict).toBe("VERIFIED");
+    // Standard confidence for 2 distinct hosts is 0.8, but with low sample warning it is lowered to 0.3
+    expect(result.claims[0]!.confidence).toBe(0.3);
   });
 });

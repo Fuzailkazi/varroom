@@ -16,14 +16,20 @@
   "scripts": {
     "dev": "bun run --filter './apps/*' dev",
     "typecheck": "bun run --filter '*' typecheck",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "ci": "bun run lint && bun run typecheck",
     "test": "bun --env-file=.env test --timeout 20000",
     "db:generate": "bun run --filter @varroom/db db:generate",
     "db:migrate": "bun run --filter @varroom/db db:migrate",
     "db:studio": "bun run --filter @varroom/db db:studio",
     "db:seed": "bun run --filter @varroom/db db:seed",
-    "trace": "bun --env-file=.env packages/agents/src/trace.ts"
+    "trace": "bun --env-file=.env packages/agents/src/trace.ts",
+    "eval": "bun --env-file=.env packages/agents/src/eval/cli.ts"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   }

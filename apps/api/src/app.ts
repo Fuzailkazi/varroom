@@ -44,7 +44,7 @@ export function createApp(
   // better auth reads x-forwarded-for as is, so a client could spoof it and dodge the
   // rate limit. replace it with express's req.ip, which honours trust proxy above
   app.use("/api/auth", useTrustedIp);
-  app.all("/api/auth/*splat", toNodeHandler(auth));
+  app.all("/api/auth/*splat", toNodeHandler(auth) as any);
 
   // csrf + content type guard for our write routes. before express.json() so bad requests never get parsed
   app.use("/api", requireTrustedOrigin(getTrustedOrigins(env)));
