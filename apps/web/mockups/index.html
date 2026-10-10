@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VAR Room — What's your football take?</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Schibsted+Grotesk:wght@400..700&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --lime:        oklch(0.88 0.20 124);
+      --lime-hover:  oklch(0.84 0.20 124);
+      --on-lime:     oklch(0.21 0.012 65);
+
+      --paper:   oklch(0.975 0.006 95);
+      --surface: oklch(1 0 0);
+      --sunken:  oklch(0.955 0.006 95);
+
+      --ink:     oklch(0.21 0.012 65);
+      --ink-2:   oklch(0.44 0.010 65);
+      --ink-3:   oklch(0.60 0.008 65);
+
+      --line:    oklch(0.90 0.006 80);
+
+      --success:      oklch(0.72 0.17 150);
+      --success-soft: oklch(0.95 0.06 150);
+      --warning:      oklch(0.80 0.16 78);
+      --warning-soft: oklch(0.96 0.07 78);
+      --danger:       oklch(0.62 0.21 25);
+      --danger-soft:  oklch(0.95 0.05 25);
+      --violet:       oklch(0.53 0.23 286);
+      --violet-soft:  oklch(0.95 0.04 286);
+
+      --border-w:      1.5px;
+      --border-w-bold: 2.5px;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-pill: 999px;
+
+      --shadow-hard:    3px 3px 0 var(--ink);
+      --shadow-hard-lg: 5px 5px 0 var(--ink);
+
+      --font-display: 'Bricolage Grotesque', sans-serif;
+      --font-sans: 'Schibsted Grotesk', -apple-system, sans-serif;
+      --font-mono: 'Space Mono', monospace;
+    }
+
+    [data-theme="dark"], html.dark {
+      --paper:   oklch(0.19 0.008 70);
+      --surface: oklch(0.235 0.009 70);
+      --sunken:  oklch(0.165 0.008 70);
+
+      --ink:     oklch(0.96 0.006 90);
+      --ink-2:   oklch(0.76 0.007 90);
+      --ink-3:   oklch(0.60 0.008 80);
+
+      --line:    oklch(0.32 0.009 75);
+
+      --success-soft: oklch(0.33 0.07 150);
+      --warning-soft: oklch(0.34 0.07 78);
+      --danger-soft:  oklch(0.33 0.07 25);
+      --violet-soft:  oklch(0.33 0.09 286);
+
+      --shadow-hard:    3px 3px 0 var(--ink);
+      --shadow-hard-lg: 5px 5px 0 var(--ink);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--paper);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.5;
+      padding: 16px;
+      transition: background-color 0.2s ease, color 0.2s ease;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .wrap {
+      max-width: 680px;
+      margin: 0 auto;
+      padding-bottom: 60px;
+    }
+
+    /* Minimal Top Navigation */
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      margin-bottom: 28px;
+      border-bottom: var(--border-w) solid var(--line);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-badge {
+      background: var(--lime);
+      color: var(--on-lime);
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      border: var(--border-w) solid var(--ink);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+
+    .nav-links a:hover { color: var(--ink); }
+
+    .theme-btn {
+      background: var(--surface);
+      border: var(--border-w) solid var(--ink);
+      padding: 5px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 2px 2px 0 var(--ink);
+    }
+
+    /* Card */
+    .card {
+      background: var(--surface);
+      border: var(--border-w) solid var(--ink);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-hard);
+      padding: 24px;
+      margin-bottom: 32px;
+    }
+
+    /* Primary Action Card */
+    .take-label {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: clamp(26px, 4.5vw, 36px);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    .take-textarea {
+      width: 100%;
+      min-height: 110px;
+      font-family: var(--font-sans);
+      font-size: 17px;
+      line-height: 1.45;
+      padding: 14px 16px;
+      background: var(--sunken);
+      color: var(--ink);
+      border: var(--border-w) solid var(--ink);
+      border-radius: var(--radius-sm);
+      resize: vertical;
+      outline: none;
+      margin-bottom: 16px;
+      transition: box-shadow 0.12s;
+    }
+
+    .take-textarea:focus {
+      box-shadow: 0 0 0 3px var(--lime);
+    }
+
+    /* Button */
+    .btn {
+      font-family: var(--font-sans);
+      font-weight: 700;
+      font-size: 16px;
+      padding: 14px 24px;
+      border-radius: var(--radius-pill);
+      border: var(--border-w) solid var(--ink);
+      box-shadow: var(--shadow-hard);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      user-select: none;
+      transition: transform 0.1s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.1s;
+    }
+
+    .btn:hover {
+      box-shadow: var(--shadow-hard-lg);
+      transform: translate(-1px, -1px);
+    }
+
+    .btn:active {
+      box-shadow: 1px 1px 0 var(--ink);
+      transform: translate(2px, 2px);
+    }
+
+    .btn-lime { background: var(--lime); color: var(--on-lime); }
+    .btn-lime:hover { background: var(--lime-hover); }
+
+    /* Verdict Stamps */
+    .stamp {
+      display: inline-flex;
+      align-items: center;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      border: var(--border-w) solid var(--ink);
+      white-space: nowrap;
+    }
+
+    .stamp-overturned {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+
+    .stamp-stands {
+      background: var(--lime);
+      color: var(--on-lime);
+    }
+
+    .stamp-incomplete {
+      background: var(--warning-soft);
+      color: var(--warning);
+      border-color: var(--warning);
+    }
+
+    .stamp-live {
+      background: var(--violet-soft);
+      color: var(--violet);
+      border-color: var(--violet);
+    }
+
+    /* Plain List of Recent Reviews */
+    .list-title {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 20px;
+      margin-bottom: 14px;
+      letter-spacing: -0.01em;
+    }
+
+    .feed-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .feed-row {
+      display: block;
+      background: var(--surface);
+      border: var(--border-w) solid var(--ink);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-hard);
+      padding: 16px 18px;
+      transition: transform 0.1s ease, box-shadow 0.1s ease;
+      cursor: pointer;
+    }
+
+    .feed-row:hover {
+      box-shadow: var(--shadow-hard-lg);
+      transform: translate(-1px, -1px);
+    }
+
+    .feed-row:active {
+      box-shadow: 1px 1px 0 var(--ink);
+      transform: translate(2px, 2px);
+    }
+
+    .feed-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      gap: 8px;
+    }
+
+    .take-text {
+      font-weight: 700;
+      font-size: 17px;
+      line-height: 1.35;
+      margin-bottom: 8px;
+    }
+
+    .feed-sub {
+      font-size: 13px;
+      color: var(--ink-3);
+    }
+
+    .score-badge {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    
+    <!-- MINIMAL NAV -->
+    <nav class="nav">
+      <a href="index.html" class="brand">
+        VAR ROOM
+        <span class="brand-badge">REFEREE</span>
+      </a>
+      <div class="nav-links">
+        <a href="feed.html">Feed</a>
+        <a href="review.html">Review</a>
+        <a href="showcase.html">Styles</a>
+        <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙 DARK</button>
+      </div>
+    </nav>
+
+    <!-- PRIMARY ACTION: SINGLE BIG TEXTBOX + ONE BUTTON -->
+    <main>
+      <form class="card" onsubmit="event.preventDefault(); window.location.href='review.html?running=true';">
+        <label for="takeInput" class="take-label">
+          What's your football take?
+        </label>
+        <textarea
+          id="takeInput"
+          class="take-textarea"
+          placeholder="e.g. Bellingham is twice the player when deployed as an 8 rather than an isolated false 9..."
+          required
+        >Bellingham is twice the player when deployed as an 8 rather than an isolated false 9.</textarea>
+        <button type="submit" class="btn btn-lime">
+          Check my take →
+        </button>
+      </form>
+
+      <!-- FEED OF RECENT REVIEWS UNDERNEATH AS A PLAIN LIST -->
+      <section>
+        <h2 class="list-title">Recent reviews</h2>
+        
+        <div class="feed-list">
+          
+          <!-- ITEM 1 -->
+          <a href="review.html" class="feed-row">
+            <div class="feed-top">
+              <span class="stamp stamp-overturned">OVERTURNED</span>
+              <span class="score-badge" style="color:var(--danger);">24 / 100</span>
+            </div>
+            <div class="take-text">
+              “Bellingham is twice the player when deployed as an 8 rather than a false 9.”
+            </div>
+            <div class="feed-sub">
+              8m ago · 3 claims checked · Real Madrid vs Real Betis
+            </div>
+          </a>
+
+          <!-- ITEM 2 -->
+          <a href="review.html" class="feed-row">
+            <div class="feed-top">
+              <span class="stamp stamp-stands">DECISION STANDS</span>
+              <span class="score-badge" style="color:var(--on-lime);">92 / 100</span>
+            </div>
+            <div class="take-text">
+              “Arsenal's near-post corner block routines are completely legal under Law 12.”
+            </div>
+            <div class="feed-sub">
+              24m ago · 4 claims checked · Arsenal vs Man City
+            </div>
+          </a>
+
+          <!-- ITEM 3 -->
+          <a href="review.html" class="feed-row">
+            <div class="feed-top">
+              <span class="stamp stamp-incomplete">CHECK INCOMPLETE</span>
+              <span class="score-badge" style="color:var(--warning);">51 / 100</span>
+            </div>
+            <div class="take-text">
+              “Vinícius was tripped before falling in the 74th minute penalty claim.”
+            </div>
+            <div class="feed-sub">
+              1h ago · 2 claims checked · Real Madrid vs Real Sociedad
+            </div>
+          </a>
+
+          <!-- ITEM 4 (IN PROGRESS) -->
+          <a href="review.html?running=true" class="feed-row">
+            <div class="feed-top">
+              <span class="stamp stamp-live">CHECKING NOW...</span>
+              <span class="score-badge" style="color:var(--violet);">RUNNING</span>
+            </div>
+            <div class="take-text">
+              “Haaland’s 11 touches per 90 makes City vulnerable against Champions League transitions.”
+            </div>
+            <div class="feed-sub">
+              3m ago · Splitting claims · Checking claim 2 of 4
+            </div>
+          </a>
+
+        </div>
+      </section>
+    </main>
+
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      const btn = document.getElementById('themeBtn');
+      if (isDark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        btn.textContent = '☀️ LIGHT';
+      } else {
+        document.documentElement.setAttribute('data-theme', 'light');
+        btn.textContent = '🌙 DARK';
+      }
+    }
+  </script>
+</body>
+</html>
