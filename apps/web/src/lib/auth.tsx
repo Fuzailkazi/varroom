@@ -5,6 +5,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  isEmail,
+  normalizeAuthError,
+  validatePassword,
+  validateUsername,
+  cleanDisplayName,
+} from "./auth-utils";
 
 export interface AuthUser {
   id: string;
@@ -13,17 +20,35 @@ export interface AuthUser {
   displayName: string;
   email: string;
   emailVerified: boolean;
-  role: string;
-  badge: string;
+  role: "USER" | "ADMIN" | string;
+  badge: "SPECTATOR" | "ASSISTANT_REF" | "CHIEF_VAR" | string;
   tacticalIqScore: number;
+  joinedAt?: string;
 }
 
-interface AuthContextValue {
+export interface AuthResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   error: string | null;
-  signIn: (email: string, password: string) => Promise<boolean>;
+  isAuthenticated: boolean;
+  isVerified: boolean;
+  signIn: (identifier: string, password: string) => Promise<AuthResult>;
+  signUp: (params: {
+    name: string;
+    username: string;
+    email: string;
+    password: string;
+  }) => Promise<AuthResult>;
   signOut: () => Promise<void>;
+  signOutEverywhere: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<AuthResult>;
+  resetPassword: (token: string, newPassword: string) => Promise<AuthResult>;
+  resendVerificationEmail: () => Promise<boolean>;
   refreshUser: () => Promise<AuthUser | null>;
 }
 
@@ -56,31 +81,125 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshUser();
+
+    // Revalidate when window receives focus (e.g. after clicking confirmation link in inbox)
+    const handleFocus = () => {
+      refreshUser();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
-  const signIn = async (email: string, password: string): Promise<boolean> => {
+  const signIn = async (
+    identifier: string,
+    password: string
+  ): Promise<AuthResult> => {
     setError(null);
+    const trimmedId = (identifier || "").trim();
+    if (!trimmedId || !password) {
+      const msg = "Please enter your email or username and password.";
+      setError(msg);
+      return { success: false, error: msg };
+    }
+
     try {
-      const res = await fetch("/api/auth/sign-in/email", {
+      const endpoint = isEmail(trimmedId)
+        ? "/api/auth/sign-in/email"
+        : "/api/auth/sign-in/username";
+
+      const body = isEmail(trimmedId)
+        ? { email: trimmedId, password }
+        : { username: trimmedId, password };
+
+      const res = await fetch(endpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setError(err.message || "Failed to sign in. Check email & password.");
-        return false;
+        const data = await res.json().catch(() => ({ status: res.status }));
+        const normalized = normalizeAuthError(data);
+        setError(normalized);
+        return { success: false, error: normalized };
       }
 
       await refreshUser();
-      return true;
+      return { success: true };
     } catch (err: any) {
-      setError(err.message || "Network error while signing in.");
-      return false;
+      const normalized = normalizeAuthError(err);
+      setError(normalized);
+      return { success: false, error: normalized };
+    }
+  };
+
+  const signUp = async ({
+    name,
+    username,
+    email,
+    password,
+  }: {
+    name: string;
+    username: string;
+    email: string;
+    password: string;
+  }): Promise<AuthResult> => {
+    setError(null);
+    const cleanedName = cleanDisplayName(name);
+    if (!cleanedName) {
+      const msg = "Display name must be between 1 and 50 characters.";
+      setError(msg);
+      return { success: false, error: msg };
+    }
+
+    const usernameErr = validateUsername(username);
+    if (usernameErr) {
+      setError(usernameErr);
+      return { success: false, error: usernameErr };
+    }
+
+    if (!isEmail(email)) {
+      const msg = "Enter a valid email address.";
+      setError(msg);
+      return { success: false, error: msg };
+    }
+
+    const passwordErr = validatePassword(password);
+    if (passwordErr) {
+      setError(passwordErr);
+      return { success: false, error: passwordErr };
+    }
+
+    try {
+      const res = await fetch("/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: cleanedName,
+          username: username.toLowerCase(),
+          email,
+          password,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ status: res.status }));
+        const normalized = normalizeAuthError(data);
+        setError(normalized);
+        return { success: false, error: normalized };
+      }
+
+      await refreshUser();
+      return { success: true };
+    } catch (err: any) {
+      const normalized = normalizeAuthError(err);
+      setError(normalized);
+      return { success: false, error: normalized };
     }
   };
 
@@ -88,14 +207,107 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await fetch("/api/auth/sign-out", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({}),
       });
     } finally {
       setUser(null);
+    }
+  };
+
+  const signOutEverywhere = async (): Promise<void> => {
+    try {
+      await fetch("/api/auth/revoke-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
+    } finally {
+      setUser(null);
+    }
+  };
+
+  const requestPasswordReset = async (email: string): Promise<AuthResult> => {
+    setError(null);
+    if (!isEmail(email)) {
+      const msg = "Please enter a valid email address.";
+      setError(msg);
+      return { success: false, error: msg };
+    }
+
+    try {
+      const res = await fetch("/api/auth/request-password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ status: res.status }));
+        const normalized = normalizeAuthError(data);
+        setError(normalized);
+        return { success: false, error: normalized };
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      const normalized = normalizeAuthError(err);
+      setError(normalized);
+      return { success: false, error: normalized };
+    }
+  };
+
+  const resetPassword = async (
+    token: string,
+    newPassword: string
+  ): Promise<AuthResult> => {
+    setError(null);
+    const passwordErr = validatePassword(newPassword);
+    if (passwordErr) {
+      setError(passwordErr);
+      return { success: false, error: passwordErr };
+    }
+
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token, newPassword }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ status: res.status }));
+        const normalized = normalizeAuthError(data);
+        setError(normalized);
+        return { success: false, error: normalized };
+      }
+
+      // Resetting password revokes other device sessions
+      setUser(null);
+      return { success: true };
+    } catch (err: any) {
+      const normalized = normalizeAuthError(err);
+      setError(normalized);
+      return { success: false, error: normalized };
+    }
+  };
+
+  const resendVerificationEmail = async (): Promise<boolean> => {
+    if (!user?.email) return false;
+    try {
+      const res = await fetch("/api/auth/send-verification-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: user.email }),
+      });
+      return res.ok;
+    } catch {
+      return false;
     }
   };
 
@@ -105,8 +317,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         loading,
         error,
+        isAuthenticated: !!user,
+        isVerified: !!user?.emailVerified,
         signIn,
+        signUp,
         signOut,
+        signOutEverywhere,
+        requestPasswordReset,
+        resetPassword,
+        resendVerificationEmail,
         refreshUser,
       }}
     >

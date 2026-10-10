@@ -3,6 +3,11 @@ import { HealthResponse } from "@varroom/shared";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { SignInDialog } from "@/components/auth/sign-in-dialog";
+import { VerificationBanner } from "@/components/auth/VerificationBanner";
+import { UserMenu } from "@/components/nav/UserMenu";
+import { AuthView } from "@/views/AuthView";
+import { ForgotPasswordView } from "@/views/ForgotPasswordView";
+import { ResetPasswordView } from "@/views/ResetPasswordView";
 import { HomeView } from "@/views/HomeView";
 import { ReviewView } from "@/views/ReviewView";
 import { FeedView } from "@/views/FeedView";
@@ -19,6 +24,10 @@ export function App() {
   const [currentPath, setCurrentPath] = useState<string>(() => {
     if (typeof window === "undefined") return "/";
     return window.location.pathname || "/";
+  });
+  const [searchQuery, setSearchQuery] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return window.location.search || "";
   });
 
   // Active review parameters
@@ -72,6 +81,7 @@ export function App() {
   function parseUrl(pathname: string, search: string) {
     console.log("[VAR ROOM] parseUrl:", pathname, search);
     setCurrentPath(pathname);
+    setSearchQuery(search);
 
     // Extract query params
     const params = new URLSearchParams(search);
@@ -110,13 +120,10 @@ export function App() {
     console.log("[VAR ROOM] handleTakeSubmit called with:", take);
     setActiveTake(take);
 
-    // 1. If not signed in, prompt for sign in
+    // 1. If not signed in, redirect to sign-in page with returnTo
     if (!user) {
       setPendingTake(take);
-      setSignInMessage(
-        "Sign in to start official VAR adjudication against real match event metrics."
-      );
-      setSignInOpen(true);
+      navigate(`/sign-in?returnTo=${encodeURIComponent(currentPath)}`);
       return;
     }
 
@@ -210,9 +217,19 @@ export function App() {
   }
 
   // Determine active view
+  const isSignInRoute = currentPath === "/sign-in";
+  const isSignUpRoute = currentPath === "/sign-up";
+  const isForgotPasswordRoute = currentPath === "/forgot-password";
+  const isResetPasswordRoute = currentPath.startsWith("/reset-password");
   const isReviewRoute = currentPath.startsWith("/review");
   const isFeedRoute = currentPath === "/feed";
   const isShowcaseRoute = currentPath === "/showcase";
+
+  const returnToParam =
+    new URLSearchParams(searchQuery).get("returnTo") || undefined;
+  const resetTokenParam =
+    new URLSearchParams(searchQuery).get("token") ||
+    currentPath.match(/^\/reset-password\/([^/?]+)/)?.[1];
 
   return (
     <div className="min-h-screen bg-[var(--paper)] text-[var(--ink)] antialiased transition-colors duration-150 p-4">
@@ -270,25 +287,11 @@ export function App() {
             </button>
 
             {user ? (
-              <div className="flex items-center gap-1.5 ml-1">
-                <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-pill bg-[var(--lime)] text-[var(--on-lime)] border border-[var(--ink)]">
-                  @{user.username}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => signOut()}
-                  className="text-xs text-[var(--ink-3)] hover:text-[var(--ink)] underline cursor-pointer"
-                >
-                  Sign Out
-                </button>
-              </div>
+              <UserMenu onNavigate={navigate} />
             ) : (
               <button
                 type="button"
-                onClick={() => {
-                  setSignInMessage(undefined);
-                  setSignInOpen(true);
-                }}
+                onClick={() => navigate("/sign-in")}
                 className="bg-[var(--lime)] text-[var(--on-lime)] border border-[var(--ink)] px-3 py-1 rounded-pill text-xs font-bold cursor-pointer shadow-collapse hover:brightness-105 active:translate-x-[1px] active:translate-y-[1px]"
               >
                 Sign In
@@ -297,8 +300,27 @@ export function App() {
           </div>
         </nav>
 
+        {/* VERIFICATION WARNING BANNER */}
+        <VerificationBanner />
+
         {/* ACTIVE ROUTE VIEW */}
-        {isReviewRoute ? (
+        {isSignInRoute ? (
+          <AuthView
+            initialTab="signin"
+            returnTo={returnToParam}
+            onNavigate={navigate}
+          />
+        ) : isSignUpRoute ? (
+          <AuthView
+            initialTab="signup"
+            returnTo={returnToParam}
+            onNavigate={navigate}
+          />
+        ) : isForgotPasswordRoute ? (
+          <ForgotPasswordView onNavigate={navigate} />
+        ) : isResetPasswordRoute ? (
+          <ResetPasswordView token={resetTokenParam} onNavigate={navigate} />
+        ) : isReviewRoute ? (
           <ReviewView
             key={activeReviewId || activeTake || "review"}
             reviewId={activeReviewId}
