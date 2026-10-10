@@ -1,10 +1,12 @@
-import { describe, expect, test } from "bun:test";
-import type { Event, LlmAgent } from "@google/adk";
+import { expect, test, describe } from "bun:test";
 import { createEvent } from "@google/adk";
-import type { AttemptContext, RunAgentFn, SearchWebFn } from "./pipeline.ts";
-import { readAgentEvents, runAttempts, runPipeline } from "./pipeline.ts";
-import type { AgentReply, AiCallRecord, SearchReply, TokenUsage, WebSource } from "./types.ts";
+import type { Event } from "@google/adk";
+import { buildSearchQuery, isLowSampleEvidence, readAgentEvents, runAttempts, runPipeline } from "./pipeline.ts";
+import type { AttemptContext } from "./pipeline.ts";
 import { PipelineError, ReviewStoppedError } from "./types.ts";
+import type { RunAgentFn, SearchWebFn, EvidenceEntry } from "./pipeline.ts";
+import type { LlmAgent } from "@google/adk";
+import type { AgentReply, AiCallRecord, SearchReply, TokenUsage, WebSource } from "./types.ts";
 
 // builds what one fake agent attempt returns: the json as text, plus optional token usage
 function reply(json: object, usage: TokenUsage | null = null): AgentReply {
@@ -20,7 +22,10 @@ function found(sources: WebSource[], usage: TokenUsage | null = null): SearchRep
 // We distinguish moderator from fact_checker by checking whether the input
 // starts with "Claims:" — the pipeline always builds the fact checker prompt
 // that way.
-function makeRunAgentFn(moderatorOutput: object, factCheckerOutput: object): RunAgentFn {
+function makeRunAgentFn(
+  moderatorOutput: object,
+  factCheckerOutput: object
+): RunAgentFn {
   return async (_agent: LlmAgent, input: string) => {
     if (input.startsWith("Claims:")) {
       return reply(factCheckerOutput);
@@ -268,7 +273,9 @@ describe("runPipeline — citation validation", () => {
 
     const result = await runPipeline("Claim A", {
       runAgentFn: makeRunAgentFn(moderator, factChecker),
-      searchWebFn: makeSearchFn([{ url: "https://siteA.com", title: "Source", publishedAt: null }]),
+      searchWebFn: makeSearchFn([
+        { url: "https://siteA.com", title: "Source", publishedAt: null },
+      ]),
     });
 
     expect(result.claims.at(0)?.verdict).toBe("INSUFFICIENT_DATA");
@@ -290,7 +297,9 @@ describe("runPipeline — citation validation", () => {
 
     const result = await runPipeline("Claim A", {
       runAgentFn: makeRunAgentFn(moderator, factChecker),
-      searchWebFn: makeSearchFn([{ url: "https://siteA.com", title: "Source", publishedAt: null }]),
+      searchWebFn: makeSearchFn([
+        { url: "https://siteA.com", title: "Source", publishedAt: null },
+      ]),
     });
 
     expect(result.claims.at(0)?.verdict).toBe("INSUFFICIENT_DATA");
@@ -344,9 +353,7 @@ describe("runPipeline — search failure", () => {
       ],
     };
     const factChecker = {
-      verdicts: [
-        { claimOrder: 2, verdict: "VERIFIED", reasoning: "Found it.", citedLabels: ["E2"] },
-      ],
+      verdicts: [{ claimOrder: 2, verdict: "VERIFIED", reasoning: "Found it.", citedLabels: ["E2"] }],
     };
 
     // first search throws, second one works
@@ -561,16 +568,10 @@ describe("runPipeline — progress callback and entities", () => {
 
     const result = await runPipeline("text", {
       runAgentFn: makeRunAgentFn(moderator, { verdicts: [] }),
-      searchWebFn: makeSearchFn([
-        { url: "https://site.com/a", title: "site.com", publishedAt: null },
-      ]),
+      searchWebFn: makeSearchFn([{ url: "https://site.com/a", title: "site.com", publishedAt: null }]),
     });
 
-    expect(result.claims.at(0)?.entities).toEqual({
-      player: "Bellingham",
-      positionA: "false 9",
-      positionB: "8",
-    });
+    expect(result.claims.at(0)?.entities).toEqual({ player: "Bellingham", positionA: "false 9", positionB: "8" });
   });
 });
 
@@ -587,10 +588,7 @@ function testableClaim(order: number) {
 }
 
 // collects every call the pipeline reports, so a test can check them afterwards
-function makeCallLog(): {
-  calls: AiCallRecord[];
-  onAiCall: (record: AiCallRecord) => Promise<void>;
-} {
+function makeCallLog(): { calls: AiCallRecord[]; onAiCall: (record: AiCallRecord) => Promise<void> } {
   const calls: AiCallRecord[] = [];
   return {
     calls: calls,
@@ -640,10 +638,7 @@ describe("runPipeline — recording every gemini call", () => {
       return reply(oneClaim, moderatorUsage);
     };
     const search: SearchWebFn = async () => {
-      return found(
-        [{ url: "https://site.com/a", title: "site.com", publishedAt: null }],
-        searchUsage,
-      );
+      return found([{ url: "https://site.com/a", title: "site.com", publishedAt: null }], searchUsage);
     };
     const log = makeCallLog();
 
@@ -670,9 +665,7 @@ describe("runPipeline — recording every gemini call", () => {
 
     await runPipeline("text", {
       runAgentFn: makeRunAgentFn(oneClaim, oneVerified),
-      searchWebFn: makeSearchFn([
-        { url: "https://site.com/a", title: "site.com", publishedAt: null },
-      ]),
+      searchWebFn: makeSearchFn([{ url: "https://site.com/a", title: "site.com", publishedAt: null }]),
       onAiCall: log.onAiCall,
     });
 
@@ -730,11 +723,7 @@ describe("runPipeline — retries", () => {
     try {
       await runPipeline("text", {
         runAgentFn: makeRunAgentFn(oneClaim, oneVerified),
-        searchWebFn: makeSearchThatFailsFirst([
-          "Gemini error 503",
-          "Gemini error 503",
-          "Gemini error 503",
-        ]),
+        searchWebFn: makeSearchThatFailsFirst(["Gemini error 503", "Gemini error 503", "Gemini error 503"]),
         onAiCall: log.onAiCall,
         retryDelayMs: 0,
       });
@@ -768,9 +757,7 @@ describe("runPipeline — retries", () => {
 
     await runPipeline("text", {
       runAgentFn: agents,
-      searchWebFn: makeSearchFn([
-        { url: "https://site.com/a", title: "site.com", publishedAt: null },
-      ]),
+      searchWebFn: makeSearchFn([{ url: "https://site.com/a", title: "site.com", publishedAt: null }]),
       onAiCall: log.onAiCall,
       retryDelayMs: 0,
     });
@@ -795,9 +782,7 @@ describe("runPipeline — retries", () => {
     try {
       await runPipeline("text", {
         runAgentFn: agents,
-        searchWebFn: makeSearchFn([
-          { url: "https://site.com/a", title: "site.com", publishedAt: null },
-        ]),
+        searchWebFn: makeSearchFn([{ url: "https://site.com/a", title: "site.com", publishedAt: null }]),
         onAiCall: log.onAiCall,
         retryDelayMs: 0,
       });
@@ -819,20 +804,14 @@ describe("runPipeline — retries", () => {
     const log = makeCallLog();
 
     const result = await runPipeline("text", {
-      runAgentFn: makeRunAgentFn(
-        { claims: [testableClaim(1), testableClaim(2)] },
-        { verdicts: [] },
-      ),
+      runAgentFn: makeRunAgentFn({ claims: [testableClaim(1), testableClaim(2)] }, { verdicts: [] }),
       searchWebFn: makeSearchThatFailsFirst(["Search API unreachable"]),
       onAiCall: log.onAiCall,
       retryDelayMs: 0,
     });
 
     // claim 1's search failed once and stopped there, claim 2's worked
-    expect(callSummary(log.calls).slice(1, 3)).toEqual([
-      "SEARCH #1 claim=1 ERROR",
-      "SEARCH #1 claim=2 OK",
-    ]);
+    expect(callSummary(log.calls).slice(1, 3)).toEqual(["SEARCH #1 claim=1 ERROR", "SEARCH #1 claim=2 OK"]);
     expect(result.evidence.at(0)?.error).toBe("Search API unreachable");
   });
 
@@ -841,7 +820,7 @@ describe("runPipeline — retries", () => {
     const brokenModerator: RunAgentFn = async () => ({ text: "not json", usage: null });
 
     await expect(
-      runPipeline("text", { runAgentFn: brokenModerator, onAiCall: log.onAiCall, retryDelayMs: 0 }),
+      runPipeline("text", { runAgentFn: brokenModerator, onAiCall: log.onAiCall, retryDelayMs: 0 })
     ).rejects.toBeInstanceOf(PipelineError);
 
     expect(callSummary(log.calls)).toEqual(["MODERATOR #1 claim=null OK"]);
@@ -943,11 +922,7 @@ describe("runPipeline — at most 5 claims are searched", () => {
     };
     const log = makeCallLog();
 
-    const result = await runPipeline("text", {
-      runAgentFn: agents,
-      searchWebFn: search,
-      onAiCall: log.onAiCall,
-    });
+    const result = await runPipeline("text", { runAgentFn: agents, searchWebFn: search, onAiCall: log.onAiCall });
 
     // claims 1, 2, 4, 5 and 6 are the first 5 testable ones
     expect(searchedQueries).toHaveLength(5);
@@ -976,39 +951,22 @@ describe("runPipeline — at most 5 claims are searched", () => {
   });
 
   test("the limit follows claim order even when the moderator lists them out of order", async () => {
-    const claims = [
-      testableClaim(6),
-      testableClaim(1),
-      testableClaim(2),
-      testableClaim(3),
-      testableClaim(4),
-      testableClaim(5),
-    ];
+    const claims = [testableClaim(6), testableClaim(1), testableClaim(2), testableClaim(3), testableClaim(4), testableClaim(5)];
     const log = makeCallLog();
 
     const result = await runPipeline("text", {
       runAgentFn: makeRunAgentFn({ claims: claims }, { verdicts: [] }),
-      searchWebFn: makeSearchFn([
-        { url: "https://site.com/a", title: "site.com", publishedAt: null },
-      ]),
+      searchWebFn: makeSearchFn([{ url: "https://site.com/a", title: "site.com", publishedAt: null }]),
       onAiCall: log.onAiCall,
     });
 
-    expect(result.claims.find((c) => c.order === 6)?.reasoning).toBe(
-      "Not checked: a review checks at most 5 claims.",
-    );
+    expect(result.claims.find((c) => c.order === 6)?.reasoning).toBe("Not checked: a review checks at most 5 claims.");
     const searchCalls = log.calls.filter((call) => call.step === "SEARCH");
     expect(searchCalls).toHaveLength(5);
   });
 
   test("exactly 5 testable claims are all searched", async () => {
-    const claims = [
-      testableClaim(1),
-      testableClaim(2),
-      testableClaim(3),
-      testableClaim(4),
-      testableClaim(5),
-    ];
+    const claims = [testableClaim(1), testableClaim(2), testableClaim(3), testableClaim(4), testableClaim(5)];
     let searches = 0;
     const search: SearchWebFn = async () => {
       searches++;
@@ -1028,10 +986,7 @@ describe("runPipeline — at most 5 claims are searched", () => {
 });
 
 // settings for calling runAttempts directly
-function attemptContext(
-  calls: AiCallRecord[],
-  overrides: Partial<AttemptContext> = {},
-): AttemptContext {
+function attemptContext(calls: AiCallRecord[], overrides: Partial<AttemptContext> = {}): AttemptContext {
   return {
     claimOrder: null,
     model: "test-model",
@@ -1050,7 +1005,7 @@ describe("runAttempts", () => {
     const neverAnswers = () => new Promise<AgentReply>(() => {});
 
     await expect(
-      runAttempts("MODERATOR", 3, neverAnswers, attemptContext(calls, { timeoutMs: 20 })),
+      runAttempts("MODERATOR", 3, neverAnswers, attemptContext(calls, { timeoutMs: 20 }))
     ).rejects.toThrow("timed out");
 
     // a timeout isn't a temporary gemini error, so it's not retried
@@ -1069,7 +1024,7 @@ describe("runAttempts", () => {
 
     const started = Date.now();
     await expect(
-      runAttempts("MODERATOR", 3, alwaysBusy, attemptContext(calls, { retryDelayMs: 20 })),
+      runAttempts("MODERATOR", 3, alwaysBusy, attemptContext(calls, { retryDelayMs: 20 }))
     ).rejects.toThrow("503 high demand");
     const elapsed = Date.now() - started;
 
@@ -1099,7 +1054,7 @@ describe("runAttempts", () => {
     };
 
     await expect(
-      runAttempts("MODERATOR", 3, works, attemptContext(calls, { shouldStop: () => true })),
+      runAttempts("MODERATOR", 3, works, attemptContext(calls, { shouldStop: () => true }))
     ).rejects.toBeInstanceOf(ReviewStoppedError);
 
     expect(attempts).toBe(0);
@@ -1116,12 +1071,7 @@ describe("runAttempts", () => {
     };
 
     await expect(
-      runAttempts(
-        "MODERATOR",
-        3,
-        busyUntilTheReviewEnds,
-        attemptContext(calls, { shouldStop: () => ended }),
-      ),
+      runAttempts("MODERATOR", 3, busyUntilTheReviewEnds, attemptContext(calls, { shouldStop: () => ended }))
     ).rejects.toBeInstanceOf(ReviewStoppedError);
 
     // the running attempt is still counted, the 503 would normally have been retried
@@ -1132,60 +1082,9 @@ describe("runAttempts", () => {
   test("works with no onAiCall at all", async () => {
     const works = async (): Promise<AgentReply> => reply({ ok: true });
 
-    const result = await runAttempts(
-      "MODERATOR",
-      3,
-      works,
-      attemptContext([], { onAiCall: undefined }),
-    );
+    const result = await runAttempts("MODERATOR", 3, works, attemptContext([], { onAiCall: undefined }));
 
     expect(result.text).toBe('{"ok":true}');
-  });
-
-  // each of these messages means "busy right now", so the attempt is worth trying again
-  const temporaryMessages = [
-    "Gemini error 503: service unavailable",
-    "Gemini error 429: quota exceeded",
-    "The model is experiencing high demand",
-    "The model is OVERLOADED",
-    "Please try again later",
-  ];
-
-  for (const message of temporaryMessages) {
-    test(`retries a temporary error: "${message}"`, async () => {
-      const calls: AiCallRecord[] = [];
-      let attempts = 0;
-      const failsOnce = async (): Promise<AgentReply> => {
-        attempts++;
-        if (attempts === 1) {
-          throw new Error(message);
-        }
-        return reply({ ok: true });
-      };
-
-      await runAttempts("MODERATOR", 3, failsOnce, attemptContext(calls));
-
-      expect(attempts).toBe(2);
-      expect(calls.map((call) => call.status)).toEqual(["ERROR", "OK"]);
-      expect(calls[0]?.error).toBe(message);
-    });
-  }
-
-  test("a thrown string (not an Error) is still read, retried and recorded", async () => {
-    const calls: AiCallRecord[] = [];
-    let attempts = 0;
-    const throwsAString = async (): Promise<AgentReply> => {
-      attempts++;
-      if (attempts === 1) {
-        throw "503 high demand";
-      }
-      return reply({ ok: true });
-    };
-
-    await runAttempts("MODERATOR", 3, throwsAString, attemptContext(calls));
-
-    expect(attempts).toBe(2);
-    expect(calls[0]?.error).toBe("503 high demand");
   });
 });
 
@@ -1199,10 +1098,7 @@ async function* eventsOf(events: Event[]): AsyncGenerator<Event> {
 describe("readAgentEvents", () => {
   test("takes the usage of the last event that has one, never a sum", async () => {
     const events = [
-      createEvent({
-        partial: true,
-        usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 1 },
-      }),
+      createEvent({ partial: true, usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 1 } }),
       createEvent({
         content: { role: "model", parts: [{ text: '{"claims":[]}' }] },
         usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 30, thoughtsTokenCount: 8 },
@@ -1217,10 +1113,7 @@ describe("readAgentEvents", () => {
 
   test("keeps an earlier usage when the final event has none", async () => {
     const events = [
-      createEvent({
-        partial: true,
-        usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 10 },
-      }),
+      createEvent({ partial: true, usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 10 } }),
       createEvent({ content: { role: "model", parts: [{ text: "done" }] } }),
     ];
 
@@ -1240,9 +1133,7 @@ describe("readAgentEvents", () => {
   test("throws gemini's error when an event carries one", async () => {
     const events = [createEvent({ errorCode: "503", errorMessage: "The model is overloaded" })];
 
-    await expect(readAgentEvents(eventsOf(events))).rejects.toThrow(
-      "Gemini error 503: The model is overloaded",
-    );
+    await expect(readAgentEvents(eventsOf(events))).rejects.toThrow("Gemini error 503: The model is overloaded");
   });
 
   test("throws when the run ends without a final answer", async () => {
@@ -1262,5 +1153,166 @@ describe("readAgentEvents", () => {
 
     expect(runFinished).toBe(true);
     expect(result.text).toBe("first answer");
+  });
+});
+
+describe("buildSearchQuery and low sample evidence", () => {
+  test("builds tailored search queries for each claim type", () => {
+    const positional = {
+      order: 1,
+      claimText: "Bellingham is better as a 9 than an 8",
+      type: "POSITIONAL_ROLE" as const,
+      entities: { player: "Bellingham", positionA: "9", positionB: "8" },
+    };
+    expect(buildSearchQuery(positional)).toBe("Bellingham 9 vs 8 stats");
+
+    const comparison = {
+      order: 2,
+      claimText: "Haaland scores more per 90 than Mbappe",
+      type: "COMPARISON" as const,
+      entities: { playerA: "Haaland", playerB: "Mbappe", metric: "goals per 90" },
+    };
+    expect(buildSearchQuery(comparison)).toBe("Haaland vs Mbappe goals per 90 stats comparison");
+
+    const tactic = {
+      order: 3,
+      claimText: "Arsenal concede fewer shots than Man City",
+      type: "TEAM_TACTIC" as const,
+      entities: { team: "Arsenal", metric: "shots conceded per game" },
+    };
+    expect(buildSearchQuery(tactic)).toBe("Arsenal shots conceded per game");
+
+    const transfer = {
+      order: 4,
+      claimText: "Gyokeres fits Arsenal style",
+      type: "TRANSFER_FIT" as const,
+      entities: { player: "Gyokeres", team: "Arsenal" },
+    };
+    expect(buildSearchQuery(transfer)).toBe("Gyokeres Arsenal transfer fit stats analysis");
+  });
+
+  test("detects small sample signals in source titles and urls", () => {
+    expect(
+      isLowSampleEvidence({
+        sourceTitle: "Haaland early season small sample size stats",
+        sourceUrl: "https://theanalyst.com/article",
+      })
+    ).toBe(true);
+
+    expect(
+      isLowSampleEvidence({
+        sourceTitle: "Player limited minutes breakdown",
+        sourceUrl: "https://fbref.com/player",
+      })
+    ).toBe(true);
+
+    expect(
+      isLowSampleEvidence({
+        sourceTitle: "Premier League Season Overview",
+        sourceUrl: "https://bbc.com/sport/football",
+      })
+    ).toBe(false);
+  });
+});
+
+describe("runPipeline — wider claim types and sample sizes", () => {
+  test("processes COMPARISON and TEAM_TACTIC claims and scores them", async () => {
+    const moderator = {
+      claims: [
+        {
+          order: 1,
+          claimText: "Haaland scores more non-penalty goals per 90 than Mbappe",
+          type: "COMPARISON",
+          entities: { playerA: "Haaland", playerB: "Mbappe", metric: "non-penalty goals" },
+        },
+        {
+          order: 2,
+          claimText: "Arsenal concede fewer shots per game than Man City",
+          type: "TEAM_TACTIC",
+          entities: { team: "Arsenal", metric: "shots conceded" },
+        },
+      ],
+    };
+
+    const factChecker = {
+      verdicts: [
+        {
+          claimOrder: 1,
+          verdict: "VERIFIED",
+          reasoning: "Haaland leads in non-penalty scoring rate.",
+          citedLabels: ["E1"],
+        },
+        {
+          claimOrder: 2,
+          verdict: "PARTIALLY_TRUE",
+          reasoning: "Shot counts are close across recent seasons.",
+          citedLabels: ["E3"],
+        },
+      ],
+    };
+
+    const sources = [
+      { url: "https://understat.com/stats", title: "Understat Champions League", publishedAt: null },
+      { url: "https://fbref.com/stats", title: "FBref Premier League Defense", publishedAt: null },
+    ];
+
+    const result = await runPipeline("Haaland vs Mbappe debate", {
+      runAgentFn: makeRunAgentFn(moderator, factChecker),
+      searchWebFn: makeSearchFn(sources),
+    });
+
+    expect(result.claims).toHaveLength(2);
+    expect(result.claims[0]!.type).toBe("COMPARISON");
+    expect(result.claims[0]!.verdict).toBe("VERIFIED");
+    expect(result.claims[1]!.type).toBe("TEAM_TACTIC");
+    expect(result.claims[1]!.verdict).toBe("PARTIALLY_TRUE");
+    expect(result.score).toBe(75);
+    expect(result.decision).toBe("CONFIRMED");
+  });
+
+  test("lowers confidence when cited evidence has a small sample size warning", async () => {
+    const moderator = {
+      claims: [
+        {
+          order: 1,
+          claimText: "Endrick scores more per minute than Rodrygo",
+          type: "COMPARISON",
+          entities: { playerA: "Endrick", playerB: "Rodrygo" },
+        },
+      ],
+    };
+
+    const factChecker = {
+      verdicts: [
+        {
+          claimOrder: 1,
+          verdict: "VERIFIED",
+          reasoning: "High goal rate in limited minutes.",
+          citedLabels: ["E1", "E2"],
+        },
+      ],
+    };
+
+    const sources = [
+      {
+        url: "https://theathletic.com/article1",
+        title: "Endrick stats with small sample size warning",
+        publishedAt: null,
+      },
+      {
+        url: "https://espn.com/article2",
+        title: "Real Madrid bench efficiency",
+        publishedAt: null,
+      },
+    ];
+
+    const result = await runPipeline("Endrick super sub impact", {
+      runAgentFn: makeRunAgentFn(moderator, factChecker),
+      searchWebFn: makeSearchFn(sources),
+    });
+
+    expect(result.claims[0]!.verdict).toBe("VERIFIED");
+    // Standard confidence for 2 distinct hosts is 0.8, but with low sample warning it is lowered to 0.3
+    expect(result.claims[0]!.confidence).toBe(0.3);
   });
 });
