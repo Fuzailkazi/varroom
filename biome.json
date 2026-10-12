@@ -13,6 +13,7 @@
       "package.json",
       "tsconfig.base.json",
       "biome.json",
+      "!apps/web/mockups",
       "!packages/db/prisma/generated-sql"
     ]
   },
@@ -33,5 +34,17 @@
         "noNonNullAssertion": "off"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/web/src/index.css"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noUnknownAtRules": "off"
+          }
+        }
+      }
+    }
+  ]
 }

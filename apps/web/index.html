@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VAR Room — What's your football take?</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Schibsted+Grotesk:wght@400..700&family=Space+Mono:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      (() => {
+        try {
+          const stored = localStorage.getItem("varroom-theme");
+          let isDark = false;
+          if (stored === "dark") {
+            isDark = true;
+          } else if (stored === "light") {
+            isDark = false;
+          } else if (stored === "system") {
+            isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          } else {
+            isDark = false; // Light mode primary as specified
+          }
+          if (isDark) {
+            document.documentElement.classList.add("dark");
+            document.documentElement.setAttribute("data-theme", "dark");
+          } else {
+            document.documentElement.classList.remove("dark");
+            document.documentElement.setAttribute("data-theme", "light");
+          }
+        } catch (_e) {
+          document.documentElement.classList.remove("dark");
+        }
+      })();
+    </script>
+  </head>
+  <body class="min-h-screen bg-[var(--paper)] text-[var(--ink)] antialiased transition-colors duration-150">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

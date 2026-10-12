@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VAR Room — Component Styles</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Schibsted+Grotesk:wght@400..700&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --lime:        oklch(0.88 0.20 124);
+      --lime-hover:  oklch(0.84 0.20 124);
+      --on-lime:     oklch(0.21 0.012 65);
+
+      --paper:   oklch(0.975 0.006 95);
+      --surface: oklch(1 0 0);
+      --sunken:  oklch(0.955 0.006 95);
+
+      --ink:     oklch(0.21 0.012 65);
+      --ink-2:   oklch(0.44 0.010 65);
+      --ink-3:   oklch(0.60 0.008 65);
+
+      --line:    oklch(0.90 0.006 80);
+
+      --success:      oklch(0.72 0.17 150);
+      --success-soft: oklch(0.95 0.06 150);
+      --warning:      oklch(0.80 0.16 78);
+      --warning-soft: oklch(0.96 0.07 78);
+      --danger:       oklch(0.62 0.21 25);
+      --danger-soft:  oklch(0.95 0.05 25);
+      --violet:       oklch(0.53 0.23 286);
+      --violet-soft:  oklch(0.95 0.04 286);
+
+      --border-w:      1.5px;
+      --border-w-bold: 2.5px;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-pill: 999px;
+
+      --shadow-hard:    3px 3px 0 var(--ink);
+      --shadow-hard-lg: 5px 5px 0 var(--ink);
+
+      --font-display: 'Bricolage Grotesque', sans-serif;
+      --font-sans: 'Schibsted Grotesk', -apple-system, sans-serif;
+      --font-mono: 'Space Mono', monospace;
+    }
+
+    [data-theme="dark"], html.dark {
+      --paper:   oklch(0.19 0.008 70);
+      --surface: oklch(0.235 0.009 70);
+      --sunken:  oklch(0.165 0.008 70);
+
+      --ink:     oklch(0.96 0.006 90);
+      --ink-2:   oklch(0.76 0.007 90);
+      --ink-3:   oklch(0.60 0.008 80);
+
+      --line:    oklch(0.32 0.009 75);
+
+      --success-soft: oklch(0.33 0.07 150);
+      --warning-soft: oklch(0.34 0.07 78);
+      --danger-soft:  oklch(0.33 0.07 25);
+      --violet-soft:  oklch(0.33 0.09 286);
+
+      --shadow-hard:    3px 3px 0 var(--ink);
+      --shadow-hard-lg: 5px 5px 0 var(--ink);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--paper);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.5;
+      padding: 16px;
+      transition: background-color 0.2s ease, color 0.2s ease;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .wrap {
+      max-width: 680px;
+      margin: 0 auto;
+      padding-bottom: 60px;
+    }
+
+    /* Minimal Nav */
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      margin-bottom: 24px;
+      border-bottom: var(--border-w) solid var(--line);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink-2);
+    }
+
+    .nav-links a:hover { color: var(--ink); }
+
+    .theme-btn {
+      background: var(--surface);
+      border: var(--border-w) solid var(--ink);
+      padding: 5px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 2px 2px 0 var(--ink);
+    }
+
+    /* Card */
+    .card {
+      background: var(--surface);
+      border: var(--border-w) solid var(--ink);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-hard);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 20px;
+      margin-bottom: 12px;
+      letter-spacing: -0.01em;
+    }
+
+    /* Button */
+    .btn {
+      font-family: var(--font-sans);
+      font-weight: 700;
+      font-size: 15px;
+      padding: 12px 20px;
+      border-radius: var(--radius-pill);
+      border: var(--border-w) solid var(--ink);
+      box-shadow: var(--shadow-hard);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      user-select: none;
+      transition: transform 0.1s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.1s;
+    }
+
+    .btn:hover {
+      box-shadow: var(--shadow-hard-lg);
+      transform: translate(-1px, -1px);
+    }
+
+    .btn:active {
+      box-shadow: 1px 1px 0 var(--ink);
+      transform: translate(2px, 2px);
+    }
+
+    .btn-lime { background: var(--lime); color: var(--on-lime); }
+    .btn-white { background: var(--surface); color: var(--ink); }
+
+    /* Stamps */
+    .stamp {
+      display: inline-flex;
+      align-items: center;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      padding: 5px 12px;
+      border-radius: var(--radius-pill);
+      border: var(--border-w-bold) solid var(--ink);
+      box-shadow: 2px 2px 0 var(--ink);
+    }
+
+    .stamp-overturned { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
+    .stamp-stands { background: var(--lime); color: var(--on-lime); }
+    .stamp-incomplete { background: var(--warning-soft); color: var(--warning); border-color: var(--warning); }
+
+    /* Segmented Bar */
+    .bar-track {
+      display: grid;
+      grid-template-columns: repeat(20, 1fr);
+      gap: 3px;
+      padding: 4px;
+      background: var(--sunken);
+      border: var(--border-w) solid var(--ink);
+      border-radius: 6px;
+      margin: 12px 0;
+    }
+
+    .bar-tick {
+      height: 18px;
+      border: 1px solid var(--ink);
+      border-radius: 2px;
+      background: var(--paper);
+    }
+
+    .bar-tick.on { background: var(--lime); }
+    .bar-tick.danger { background: var(--danger); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    
+    <!-- MINIMAL NAV -->
+    <nav class="nav">
+      <a href="index.html" class="brand">
+        VAR ROOM
+      </a>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="review.html">Review</a>
+        <a href="feed.html">Feed</a>
+        <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙 DARK</button>
+      </div>
+    </nav>
+
+    <header style="margin-bottom: 24px;">
+      <h1 style="font-family:var(--font-display); font-weight:800; font-size:32px; letter-spacing:-0.02em; margin-bottom:4px;">
+        Component Styles
+      </h1>
+      <p style="font-size:14px; color:var(--ink-2);">
+        The simplified DMflo-adapted kit: one primary action, plain words, no dashboard clutter.
+      </p>
+    </header>
+
+    <!-- 1. VERDICT STAMPS -->
+    <section class="card">
+      <h2 class="section-title">Verdict Stamps</h2>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <span class="stamp stamp-stands">DECISION STANDS</span>
+        <span class="stamp stamp-overturned">OVERTURNED</span>
+        <span class="stamp stamp-incomplete">CHECK INCOMPLETE</span>
+      </div>
+    </section>
+
+    <!-- 2. PRIMARY BUTTON & SHADOW COLLAPSE -->
+    <section class="card">
+      <h2 class="section-title">Buttons & Press Effect</h2>
+      <p style="font-size:14px; color:var(--ink-2); margin-bottom:12px;">
+        Click to test the shadow collapse interaction (`translate(2px, 2px)`).
+      </p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-lime">Check my take →</button>
+        <button class="btn btn-white">Cancel</button>
+      </div>
+    </section>
+
+    <!-- 3. SCORE GAUGE (CHUNKY SCORE + 20 NOTCHES) -->
+    <section class="card">
+      <h2 class="section-title">Score & League Barometer</h2>
+      <div style="display:flex; justify-content:space-between; align-items:baseline;">
+        <span style="font-size:14px; color:var(--ink-2);">20 discrete ink-bordered notches</span>
+        <span style="font-family:var(--font-display); font-weight:800; font-size:36px; color:var(--danger);">24 / 100</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-tick danger"></div>
+        <div class="bar-tick danger"></div>
+        <div class="bar-tick danger"></div>
+        <div class="bar-tick danger"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+        <div class="bar-tick"></div>
+      </div>
+    </section>
+
+    <!-- 4. SIMPLE CLAIM ROW + SHOW SOURCES -->
+    <section class="card">
+      <h2 class="section-title">Claim Item with Sources Drawer</h2>
+      <div style="background:var(--sunken); border:var(--border-w) solid var(--ink); border-radius:var(--radius-sm); padding:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <strong style="font-size:15px;">Produces higher expected assists as an 8</strong>
+          <span style="font-family:var(--font-display); font-weight:800; font-size:11px; padding:2px 8px; border-radius:var(--radius-pill); background:var(--danger); color:#fff;">CONTRADICTED</span>
+        </div>
+        <div style="font-size:13px; color:var(--ink-2); margin-bottom:6px;">
+          His central 8 deployment generated 0.14 xA vs 0.38 xA as a false 9.
+        </div>
+        <button onclick="document.getElementById('demoSrc').style.display = document.getElementById('demoSrc').style.display === 'block' ? 'none' : 'block'" style="background:transparent; border:none; font-weight:700; font-size:12px; cursor:pointer; padding:0; color:var(--ink);">
+          ▼ Show sources
+        </button>
+        <div id="demoSrc" style="display:block; margin-top:8px; padding:8px; background:var(--surface); border:1px solid var(--ink); border-radius:6px; font-size:12px; color:var(--ink-2);">
+          <span style="font-family:var(--font-mono); font-weight:700; padding:1px 5px; background:var(--sunken); border:1px solid var(--ink); border-radius:3px; margin-right:4px;">E1</span>
+          Opta Event #34: 0.14 xA recorded across 6 appearances.
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      const btn = document.getElementById('themeBtn');
+      if (isDark) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        btn.textContent = '☀️ LIGHT';
+      } else {
+        document.documentElement.setAttribute('data-theme', 'light');
+        btn.textContent = '🌙 DARK';
+      }
+    }
+  </script>
+</body>
+</html>
