@@ -13,7 +13,8 @@
       "package.json",
       "tsconfig.base.json",
       "biome.json",
-      "!apps/web/mockups"
+      "!apps/web/mockups",
+      "!packages/db/prisma/generated-sql"
     ]
   },
   "formatter": {

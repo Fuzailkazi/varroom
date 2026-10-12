@@ -35,6 +35,7 @@ export type EvidenceEntry = {
   sourceUrl: string | null;
   sourceTitle: string | null;
   publishedAt: Date | null;
+  lowSample?: boolean;
   error: string | null;
 };
 
@@ -125,12 +126,62 @@ function everySearchThrew(entries: EvidenceEntry[]): boolean {
   return true;
 }
 
-// Builds a grounded search query from a claim's extracted entities.
-function buildSearchQuery(claim: Claim): string {
-  const { player, positionA, positionB } = claim.entities;
-  return positionB
-    ? `${player} ${positionA} vs ${positionB} stats`
-    : `${player} ${positionA} stats`;
+// Detects if an evidence source indicates a small sample size (e.g. few games, limited minutes).
+export function isLowSampleEvidence(entry: {
+  sourceTitle: string | null;
+  sourceUrl: string | null;
+}): boolean {
+  const text = `${entry.sourceTitle ?? ""} ${entry.sourceUrl ?? ""}`.toLowerCase();
+  const lowSamplePatterns = [
+    /small\s+sample/i,
+    /low\s+sample/i,
+    /limited\s+minutes/i,
+    /limited\s+appearances/i,
+    /limited\s+sample/i,
+    /under\s+5\s+(appearances|games|matches|starts)/i,
+    /fewer\s+than\s+5\s+(appearances|games|matches|starts)/i,
+    /early\s+season\s+sample/i,
+    /tiny\s+sample/i,
+    /sample\s+size\s+warning/i,
+  ];
+  return lowSamplePatterns.some((pattern) => pattern.test(text));
+}
+
+// Builds a grounded search query from a claim's extracted entities and type.
+export function buildSearchQuery(claim: Claim): string {
+  const { player, positionA, positionB, playerA, playerB, team, metric } = claim.entities;
+
+  if (claim.type === "POSITIONAL_ROLE") {
+    if (positionA && positionB) {
+      return `${player || ""} ${positionA} vs ${positionB} stats`.trim();
+    }
+    if (positionA) {
+      return `${player || ""} ${positionA} stats`.trim();
+    }
+    return `${player || ""} stats`.trim();
+  }
+
+  if (claim.type === "COMPARISON") {
+    const first = playerA || player || "";
+    const second = playerB || "";
+    if (first && second) {
+      return `${first} vs ${second} ${metric ? `${metric} ` : ""}stats comparison`.trim();
+    }
+    return `${first || second} stats comparison`.trim();
+  }
+
+  if (claim.type === "TEAM_TACTIC") {
+    const club = team || player || "";
+    return `${club} ${metric || "tactics stats"}`.trim();
+  }
+
+  if (claim.type === "TRANSFER_FIT") {
+    const target = player || playerA || "";
+    const club = team || "";
+    return `${target} ${club} transfer fit stats analysis`.trim();
+  }
+
+  return `${claim.claimText} stats`;
 }
 
 // Runs the agent once and returns the model's final text and token usage.
@@ -305,7 +356,7 @@ export async function runAttempts<T extends { usage: TokenUsage | null }>(
 function claimsOverSearchLimit(claims: Claim[]): Set<number> {
   const testable: Claim[] = [];
   for (const claim of claims) {
-    if (claim.type === "POSITIONAL_ROLE") {
+    if (claim.type !== "UNTESTABLE") {
       testable.push(claim);
     }
   }
@@ -355,9 +406,18 @@ Extract every distinct claim from the debate text into the structured JSON schem
 
 A claim is POSITIONAL_ROLE when it asserts that a specific player performs better or worse in one position compared to another position (e.g. "Bellingham is more effective as a false 9 than as an 8").
 
-Every other claim — a comparison between two players, a team tactic, a transfer opinion, a general character assessment — is UNTESTABLE.
+A claim is COMPARISON when it compares two players against each other on performance, stats, or ability (e.g. "Haaland scores more per 90 than Mbappe", "Saliba wins more duels than Gabriel").
 
-For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluated position), and optionally positionB (the comparison position). Order claims by their appearance in the text starting from 1.`,
+A claim is TEAM_TACTIC when it asserts facts or stats about a team's tactical system, pressing, defensive record, shape, or performance under a manager (e.g. "Arsenal concede fewer shots than Man City", "Liverpool press higher under Slot than Klopp").
+
+A claim is TRANSFER_FIT when it asserts whether a player fits a potential new club's system or stats (e.g. "Gyokeres fits Arsenal's style better than Chelsea").
+
+Every other claim — subjective hot takes, referee controversies, feelings, passion, unmatched vibes — is UNTESTABLE.
+
+For each claim:
+- Set type to POSITIONAL_ROLE, COMPARISON, TEAM_TACTIC, TRANSFER_FIT, or UNTESTABLE.
+- Extract relevant entities: player, playerA, playerB, positionA, positionB, team, manager, metric.
+- Order claims by their appearance in the text starting from 1.`,
     outputSchema: ModeratorOutput,
   });
 
@@ -396,7 +456,7 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
   const notChecked = claimsOverSearchLimit(parsedClaims);
 
   for (const claim of parsedClaims) {
-    if (claim.type !== "POSITIONAL_ROLE") continue;
+    if (claim.type === "UNTESTABLE") continue;
     if (notChecked.has(claim.order)) continue;
 
     const query = buildSearchQuery(claim);
@@ -405,7 +465,10 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
     let sources: WebSource[] = [];
     let searchError: string | null = null;
 
-    const searchContext: AttemptContext = { ...agentContext, claimOrder: claim.order };
+    const searchContext: AttemptContext = {
+      ...agentContext,
+      claimOrder: claim.order,
+    };
     try {
       const reply = await runAttempts(
         "SEARCH",
@@ -434,12 +497,17 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
         sourceUrl: null,
         sourceTitle: null,
         publishedAt: null,
+        lowSample: false,
         error: searchError ?? NO_SOURCES_ERROR,
       });
     } else {
       // one evidence row per source the search returned
       for (const source of sources) {
         labelCounter++;
+        const lowSample = isLowSampleEvidence({
+          sourceTitle: source.title,
+          sourceUrl: source.url,
+        });
         evidenceEntries.push({
           label: `E${labelCounter}`,
           toolName: "searchWeb",
@@ -449,6 +517,7 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
           sourceUrl: source.url,
           sourceTitle: source.title,
           publishedAt: source.publishedAt,
+          lowSample,
           error: null,
         });
       }
@@ -468,7 +537,7 @@ For each POSITIONAL_ROLE claim, extract the player name, positionA (the evaluate
 
   // fact checker: only sees claims that have usable evidence
   const testableClaims = parsedClaims.filter(
-    (c) => c.type === "POSITIONAL_ROLE" && claimsWithEvidence.has(c.order),
+    (c) => c.type !== "UNTESTABLE" && claimsWithEvidence.has(c.order),
   );
 
   let verdicts: FactCheckerOutput["verdicts"] = [];
@@ -546,7 +615,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
         order: claim.order,
         claimText: claim.claimText,
         entities: claim.entities,
-        type: "POSITIONAL_ROLE",
+        type: claim.type,
         verdict: "INSUFFICIENT_DATA",
         reasoning: NOT_CHECKED_REASONING,
         citedLabels: [],
@@ -560,7 +629,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
         order: claim.order,
         claimText: claim.claimText,
         entities: claim.entities,
-        type: "POSITIONAL_ROLE",
+        type: claim.type,
         verdict: "INSUFFICIENT_DATA",
         reasoning: "No usable evidence was found for this claim.",
         citedLabels: [],
@@ -575,7 +644,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
         order: claim.order,
         claimText: claim.claimText,
         entities: claim.entities,
-        type: "POSITIONAL_ROLE",
+        type: claim.type,
         verdict: "INSUFFICIENT_DATA",
         reasoning: "The Fact Checker did not return a verdict for this claim.",
         citedLabels: [],
@@ -594,7 +663,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
         order: claim.order,
         claimText: claim.claimText,
         entities: claim.entities,
-        type: "POSITIONAL_ROLE",
+        type: claim.type,
         verdict: "INSUFFICIENT_DATA",
         reasoning: `Citation check failed (${detail}).`,
         citedLabels: [],
@@ -604,17 +673,26 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
 
     // Confidence: number of distinct hostnames among cited, usable rows.
     // Two or more independent sources → 0.8; one → 0.4.
+    // When any cited evidence indicates a small sample size, confidence is lowered to 0.3.
     const citedUsable = usableEvidence.filter(
       (e) => citationCheck.validLabels.includes(e.label) && e.args.claimOrder === claim.order,
     );
+    const hasLowSample = citedUsable.some((e) => e.lowSample);
     const distinctHosts = new Set(citedUsable.map(sourceSite));
-    const confidence = citedUsable.length === 0 ? null : distinctHosts.size >= 2 ? 0.8 : 0.4;
+    let confidence: number | null = null;
+    if (citedUsable.length > 0) {
+      if (hasLowSample) {
+        confidence = 0.3;
+      } else {
+        confidence = distinctHosts.size >= 2 ? 0.8 : 0.4;
+      }
+    }
 
     return {
       order: claim.order,
       claimText: claim.claimText,
       entities: claim.entities,
-      type: "POSITIONAL_ROLE",
+      type: claim.type,
       verdict: verdict.verdict,
       reasoning: verdict.reasoning,
       citedLabels: citationCheck.validLabels,

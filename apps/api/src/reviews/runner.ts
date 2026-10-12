@@ -173,7 +173,7 @@ export async function recoverInterruptedReviews(): Promise<void> {
 type ClaimSummary = {
   order: number;
   claimText: string;
-  type: "POSITIONAL_ROLE" | "UNTESTABLE";
+  type: string;
 };
 
 // the claims_extracted event only carries the basics of each claim

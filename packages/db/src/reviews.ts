@@ -126,7 +126,7 @@ export type FinishedEvidence = {
 export type FinishedClaim = {
   order: number;
   claimText: string;
-  type: "POSITIONAL_ROLE" | "UNTESTABLE";
+  type: "POSITIONAL_ROLE" | "UNTESTABLE" | "COMPARISON" | "TEAM_TACTIC" | "TRANSFER_FIT";
   entities: unknown;
   // PENDING for untestable claims, they're never judged
   verdict: "PENDING" | "VERIFIED" | "PARTIALLY_TRUE" | "REFUTED" | "INSUFFICIENT_DATA";

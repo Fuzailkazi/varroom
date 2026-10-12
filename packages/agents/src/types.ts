@@ -3,19 +3,41 @@ import { z } from "zod";
 // ----- what the Moderator LLM returns -----
 // The Moderator reads the debate text and splits it into claims.
 // POSITIONAL_ROLE = "player X is better/worse as position A than position B"
-// UNTESTABLE = anything else we cannot check right now (tactics, transfers, etc.)
+// COMPARISON = player vs player comparison (e.g. "player A scores more than player B")
+// TEAM_TACTIC = team tactical system or stats (e.g. "team X press higher under manager Y")
+// TRANSFER_FIT = player fit or suitability for a club
+// UNTESTABLE = subjective opinion or non-falsifiable hot take
+
+export const ClaimType = z.enum([
+  "POSITIONAL_ROLE",
+  "COMPARISON",
+  "TEAM_TACTIC",
+  "TRANSFER_FIT",
+  "UNTESTABLE",
+]);
+export type ClaimType = z.infer<typeof ClaimType>;
+
+export const ClaimEntities = z
+  .object({
+    player: z.string().optional(),
+    positionA: z.string().optional(),
+    positionB: z.string().optional(),
+    playerA: z.string().optional(),
+    playerB: z.string().optional(),
+    team: z.string().optional(),
+    manager: z.string().optional(),
+    metric: z.string().optional(),
+  })
+  .passthrough();
+export type ClaimEntities = z.infer<typeof ClaimEntities>;
 
 export const ModeratorOutput = z.object({
   claims: z.array(
     z.object({
       order: z.number().int(), // position in the debate, 1-based
       claimText: z.string(),
-      type: z.enum(["POSITIONAL_ROLE", "UNTESTABLE"]),
-      entities: z.object({
-        player: z.string(),
-        positionA: z.string(),
-        positionB: z.string().optional(), // absent for UNTESTABLE claims
-      }),
+      type: ClaimType,
+      entities: ClaimEntities,
     }),
   ),
 });
@@ -43,18 +65,11 @@ export type Verdict = FactCheckerOutput["verdicts"][number];
 
 // ----- pipeline result returned to callers -----
 
-// the names the moderator pulled out of a claim. empty strings for untestable ones
-export type ClaimEntities = {
-  player: string;
-  positionA: string;
-  positionB?: string;
-};
-
 export type ClaimResult = {
   order: number;
   claimText: string;
   entities: ClaimEntities;
-  type: "POSITIONAL_ROLE" | "UNTESTABLE";
+  type: ClaimType;
   verdict: "VERIFIED" | "PARTIALLY_TRUE" | "REFUTED" | "INSUFFICIENT_DATA" | "UNTESTABLE";
   reasoning: string | null;
   citedLabels: string[];
