@@ -140,7 +140,16 @@ type PublicVerdict =
   | "REFUTED"
   | "INSUFFICIENT_DATA"
   | "UNTESTABLE";
-type PublicEntities = { player: string; positionA: string; positionB?: string };
+type PublicEntities = {
+  player: string;
+  positionA: string;
+  positionB?: string;
+  playerA?: string;
+  playerB?: string;
+  team?: string;
+  manager?: string;
+  metric?: string;
+};
 
 function toClaim(claim: ReviewDetailClaim): ReviewClaim {
   // untestable claims stay PENDING in the db, show them as UNTESTABLE
@@ -149,15 +158,10 @@ function toClaim(claim: ReviewDetailClaim): ReviewClaim {
     verdict = "UNTESTABLE";
   }
 
-  let type: "POSITIONAL_ROLE" | "UNTESTABLE" = "UNTESTABLE";
-  if (claim.type === "POSITIONAL_ROLE") {
-    type = "POSITIONAL_ROLE";
-  }
-
   return {
     order: claim.order,
     claimText: claim.claimText,
-    type: type,
+    type: claim.type,
     entities: readEntities(claim.entities),
     verdict: verdict,
     reasoning: claim.reasoning,
@@ -172,15 +176,20 @@ function readEntities(value: unknown): PublicEntities {
   if (typeof value !== "object" || value === null) {
     return entities;
   }
-  const raw = value as { player?: unknown; positionA?: unknown; positionB?: unknown };
-  if (typeof raw.player === "string") {
-    entities.player = raw.player;
-  }
-  if (typeof raw.positionA === "string") {
-    entities.positionA = raw.positionA;
-  }
-  if (typeof raw.positionB === "string") {
-    entities.positionB = raw.positionB;
+  const raw = value as Record<string, unknown>;
+  for (const key of [
+    "player",
+    "positionA",
+    "positionB",
+    "playerA",
+    "playerB",
+    "team",
+    "manager",
+    "metric",
+  ] as const) {
+    if (typeof raw[key] === "string") {
+      entities[key] = raw[key];
+    }
   }
   return entities;
 }

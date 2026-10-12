@@ -181,7 +181,27 @@ function toFinishedClaims(claims: ClaimResult[]): FinishedClaim[] {
   return rows;
 }
 
-export type { AiCallFn, PipelineOptions, RunAgentFn, SearchWebFn } from "./pipeline.ts";
+export type {
+  DebateEvalResult,
+  EvalOptions,
+  EvalRunReport,
+} from "./eval/eval.ts";
+export { runEvaluation } from "./eval/eval.ts";
+export type { ExpectedClaim, GoldenDebate } from "./eval/goldenSet.ts";
+export { GOLDEN_DEBATES } from "./eval/goldenSet.ts";
+export { estimateCostUsd, formatEvalReport } from "./eval/report.ts";
+export type {
+  AiCallFn,
+  PipelineOptions,
+  RunAgentFn,
+  SearchWebFn,
+} from "./pipeline.ts";
 export { setupTracing } from "./telemetry.ts";
-export type { AgentReply, AiCallRecord, SearchReply, TokenUsage, WebSource } from "./types.ts";
+export type {
+  AgentReply,
+  AiCallRecord,
+  SearchReply,
+  TokenUsage,
+  WebSource,
+} from "./types.ts";
 export { PipelineError, ReviewStoppedError } from "./types.ts";

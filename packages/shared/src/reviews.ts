@@ -102,11 +102,16 @@ export const AvailabilityResponse = z.object({
 export const ReviewClaim = z.object({
   order: z.number().int(),
   claimText: z.string(),
-  type: z.enum(["POSITIONAL_ROLE", "UNTESTABLE"]),
+  type: z.enum(["POSITIONAL_ROLE", "COMPARISON", "TEAM_TACTIC", "TRANSFER_FIT", "UNTESTABLE"]),
   entities: z.object({
     player: z.string(),
     positionA: z.string(),
     positionB: z.string().optional(),
+    playerA: z.string().optional(),
+    playerB: z.string().optional(),
+    team: z.string().optional(),
+    manager: z.string().optional(),
+    metric: z.string().optional(),
   }),
   verdict: z.enum([
     "PENDING",
@@ -158,7 +163,7 @@ export const ClaimsExtractedEvent = z.object({
     z.object({
       order: z.number().int(),
       claimText: z.string(),
-      type: z.enum(["POSITIONAL_ROLE", "UNTESTABLE"]),
+      type: z.enum(["POSITIONAL_ROLE", "COMPARISON", "TEAM_TACTIC", "TRANSFER_FIT", "UNTESTABLE"]),
     }),
   ),
 });

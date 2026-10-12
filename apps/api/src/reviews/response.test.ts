@@ -234,6 +234,27 @@ describe("toReviewResponse", () => {
     expect(claim?.verdict).toBe("UNTESTABLE");
   });
 
+  test("a comparison claim keeps its type and entities", () => {
+    const row = detailRow({
+      claims: [
+        claimRow({
+          type: "COMPARISON",
+          entities: { playerA: "Saka", playerB: "Foden", metric: "goals" },
+        }),
+      ],
+    });
+
+    const claim = toReviewResponse(row).review.claims[0];
+    expect(claim?.type).toBe("COMPARISON");
+    expect(claim?.entities).toEqual({
+      player: "",
+      positionA: "",
+      playerA: "Saka",
+      playerB: "Foden",
+      metric: "goals",
+    });
+  });
+
   test("a claim keeps the player and positions the moderator found", () => {
     const claim = toReviewResponse(detailRow()).review.claims[0];
 
