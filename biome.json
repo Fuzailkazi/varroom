@@ -7,7 +7,14 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["apps/**/*", "packages/**/*", "package.json", "tsconfig.base.json", "biome.json"]
+    "includes": [
+      "apps/**/*",
+      "packages/**/*",
+      "package.json",
+      "tsconfig.base.json",
+      "biome.json",
+      "!packages/db/prisma/generated-sql"
+    ]
   },
   "formatter": {
     "enabled": true,
