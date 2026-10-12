@@ -12,12 +12,12 @@ const RESERVED_USERNAMES = [
 const USERNAME_REGEX = /^[A-Za-z0-9_]+$/;
 
 export function isEmail(input: string): boolean {
-  if (!input || !input.includes("@")) return false;
+  if (!input?.includes("@")) return false;
   const parts = input.split("@");
   if (parts.length !== 2) return false;
   const user = parts[0];
   const domain = parts[1];
-  return Boolean(user && user.length > 0 && domain && domain.includes("."));
+  return Boolean(user && user.length > 0 && domain?.includes("."));
 }
 
 export function validateUsername(username: string): string | null {

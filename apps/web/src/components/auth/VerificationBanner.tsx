@@ -1,5 +1,5 @@
+import { Warning } from "@phosphor-icons/react";
 import { useState } from "react";
-import { Warning, CheckCircle } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 
@@ -16,7 +16,9 @@ export function VerificationBanner() {
     const ok = await resendVerificationEmail();
     setResending(false);
     if (ok) {
-      setStatus("Confirmation email dispatched! Check your spam folder if it doesn't arrive in 60s.");
+      setStatus(
+        "Confirmation email dispatched! Check your spam folder if it doesn't arrive in 60s.",
+      );
     } else {
       setStatus("Failed to send verification email. Please try again shortly.");
     }
@@ -31,7 +33,8 @@ export function VerificationBanner() {
             Email verification required for debate submissions & voting
           </p>
           <p className="text-xs text-[var(--ink-2)] mt-0.5">
-            {status || `We sent a link to ${user.email}. Reading is unlocked, but write permissions remain paused.`}
+            {status ||
+              `We sent a link to ${user.email}. Reading is unlocked, but write permissions remain paused.`}
           </p>
         </div>
       </div>

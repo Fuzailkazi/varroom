@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 describe("Theme resolution logic", () => {
   function resolveTheme(
     theme: "dark" | "light" | "system",
-    systemPrefersDark: boolean
+    systemPrefersDark: boolean,
   ): "dark" | "light" {
     if (theme === "system") {
       return systemPrefersDark ? "dark" : "light";

@@ -11,10 +11,10 @@
       rel="stylesheet"
     />
     <script>
-      (function () {
+      (() => {
         try {
-          var stored = localStorage.getItem("varroom-theme");
-          var isDark = false;
+          const stored = localStorage.getItem("varroom-theme");
+          let isDark = false;
           if (stored === "dark") {
             isDark = true;
           } else if (stored === "light") {
@@ -31,7 +31,7 @@
             document.documentElement.classList.remove("dark");
             document.documentElement.setAttribute("data-theme", "light");
           }
-        } catch (e) {
+        } catch (_e) {
           document.documentElement.classList.remove("dark");
         }
       })();

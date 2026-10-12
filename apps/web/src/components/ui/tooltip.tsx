@@ -1,8 +1,5 @@
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import {
-  forwardRef,
-  type ComponentPropsWithoutRef,
-} from "react";
+import { type ComponentPropsWithoutRef, forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
 export const TooltipProvider = TooltipPrimitive.Provider;
@@ -19,7 +16,7 @@ export const TooltipContent = forwardRef<
     className={cn(
       "z-50 overflow-hidden rounded-sm border-[var(--border-w)] border-[var(--ink)] px-2.5 py-1 font-mono text-xs shadow-hard animate-in fade-in-0 zoom-in-95",
       "bg-[var(--ink)] text-[var(--paper)]",
-      className
+      className,
     )}
     {...props}
   />

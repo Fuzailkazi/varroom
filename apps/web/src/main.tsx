@@ -1,9 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { App } from "./App";
+import { TooltipProvider } from "./components/ui/tooltip";
 import { AuthProvider } from "./lib/auth";
 import { ThemeProvider } from "./lib/theme";
-import { TooltipProvider } from "./components/ui/tooltip";
-import { App } from "./App";
 import "./index.css";
 
 const rootElement = document.getElementById("root");
@@ -20,5 +20,5 @@ ReactDOM.createRoot(rootElement).render(
         </TooltipProvider>
       </ThemeProvider>
     </AuthProvider>
-  </React.StrictMode>
+  </React.StrictMode>,
 );

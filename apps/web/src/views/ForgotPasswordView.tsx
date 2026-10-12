@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
 import { CheckCircle, WarningCircle } from "@phosphor-icons/react";
+import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,7 +52,8 @@ export function ForgotPasswordView({ onNavigate }: ForgotPasswordViewProps) {
                   Reset link dispatched!
                 </p>
                 <p className="text-xs text-[var(--ink-2)] mt-1">
-                  We sent a link to <span className="font-bold text-[var(--ink)]">{email}</span>. Open it to set your new password.
+                  We sent a link to <span className="font-bold text-[var(--ink)]">{email}</span>.
+                  Open it to set your new password.
                 </p>
               </div>
             </div>

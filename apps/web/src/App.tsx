@@ -1,23 +1,23 @@
-import { useEffect, useState } from "react";
 import { HealthResponse } from "@varroom/shared";
-import { useAuth } from "@/lib/auth";
-import { useTheme } from "@/lib/theme";
+import { useCallback, useEffect, useState } from "react";
 import { SignInDialog } from "@/components/auth/sign-in-dialog";
 import { VerificationBanner } from "@/components/auth/VerificationBanner";
 import { UserMenu } from "@/components/nav/UserMenu";
+import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/lib/theme";
 import { AuthView } from "@/views/AuthView";
-import { ForgotPasswordView } from "@/views/ForgotPasswordView";
-import { ResetPasswordView } from "@/views/ResetPasswordView";
-import { HomeView } from "@/views/HomeView";
-import { ReviewView } from "@/views/ReviewView";
 import { FeedView } from "@/views/FeedView";
+import { ForgotPasswordView } from "@/views/ForgotPasswordView";
+import { HomeView } from "@/views/HomeView";
+import { ResetPasswordView } from "@/views/ResetPasswordView";
+import { ReviewView } from "@/views/ReviewView";
 import { ShowcaseView } from "@/views/ShowcaseView";
 
 export function App() {
   const { resolvedTheme, setTheme } = useTheme();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [signInOpen, setSignInOpen] = useState(false);
-  const [signInMessage, setSignInMessage] = useState<string | undefined>(undefined);
+  const [signInMessage] = useState<string | undefined>(undefined);
   const [pendingTake, setPendingTake] = useState<string | null>(null);
 
   // Route state derived from window.location
@@ -31,9 +31,7 @@ export function App() {
   });
 
   // Active review parameters
-  const [activeReviewId, setActiveReviewId] = useState<string | undefined>(
-    undefined
-  );
+  const [activeReviewId, setActiveReviewId] = useState<string | undefined>(undefined);
   const [activeTake, setActiveTake] = useState<string | undefined>(undefined);
   const [isRunning, setIsRunning] = useState<boolean>(false);
 
@@ -42,7 +40,7 @@ export function App() {
   const [healthLoading, setHealthLoading] = useState(true);
   const [healthError, setHealthError] = useState<string | null>(null);
 
-  const fetchHealth = async () => {
+  const fetchHealth = useCallback(async () => {
     setHealthLoading(true);
     setHealthError(null);
     try {
@@ -58,27 +56,9 @@ export function App() {
     } finally {
       setHealthLoading(false);
     }
-  };
-
-  useEffect(() => {
-    console.log("[VAR ROOM] App mounted, path:", window.location.pathname);
-    fetchHealth();
   }, []);
 
-  // Sync route on popstate (browser back/forward)
-  useEffect(() => {
-    const handlePopState = () => {
-      console.log("[VAR ROOM] popstate:", window.location.pathname);
-      parseUrl(window.location.pathname, window.location.search);
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    parseUrl(window.location.pathname, window.location.search);
-
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  function parseUrl(pathname: string, search: string) {
+  const parseUrl = useCallback((pathname: string, search: string) => {
     console.log("[VAR ROOM] parseUrl:", pathname, search);
     setCurrentPath(pathname);
     setSearchQuery(search);
@@ -104,7 +84,25 @@ export function App() {
         setActiveReviewId(idParam);
       }
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    console.log("[VAR ROOM] App mounted, path:", window.location.pathname);
+    fetchHealth();
+  }, [fetchHealth]);
+
+  // Sync route on popstate (browser back/forward)
+  useEffect(() => {
+    const handlePopState = () => {
+      console.log("[VAR ROOM] popstate:", window.location.pathname);
+      parseUrl(window.location.pathname, window.location.search);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    parseUrl(window.location.pathname, window.location.search);
+
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [parseUrl]);
 
   function navigate(to: string) {
     console.log("[VAR ROOM] navigate to:", to);
@@ -197,7 +195,7 @@ export function App() {
           );
         });
 
-        if (match && match.latestReview) {
+        if (match?.latestReview) {
           setActiveReviewId(match.latestReview.id);
           navigate(`/review/${match.latestReview.id}`);
           return;
@@ -225,8 +223,7 @@ export function App() {
   const isFeedRoute = currentPath === "/feed";
   const isShowcaseRoute = currentPath === "/showcase";
 
-  const returnToParam =
-    new URLSearchParams(searchQuery).get("returnTo") || undefined;
+  const returnToParam = new URLSearchParams(searchQuery).get("returnTo") || undefined;
   const resetTokenParam =
     new URLSearchParams(searchQuery).get("token") ||
     currentPath.match(/^\/reset-password\/([^/?]+)/)?.[1];
@@ -277,9 +274,7 @@ export function App() {
             </button>
             <button
               type="button"
-              onClick={() =>
-                setTheme(resolvedTheme === "dark" ? "light" : "dark")
-              }
+              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
               aria-label="Toggle color theme"
               className="bg-[var(--surface)] text-[var(--ink)] border border-[var(--ink)] px-2.5 py-1 rounded-pill text-xs font-bold cursor-pointer shadow-collapse hover:bg-[var(--sunken)] active:translate-x-[1px] active:translate-y-[1px]"
             >
@@ -287,7 +282,7 @@ export function App() {
             </button>
 
             {user ? (
-              <UserMenu onNavigate={navigate} />
+              <UserMenu />
             ) : (
               <button
                 type="button"
@@ -305,17 +300,9 @@ export function App() {
 
         {/* ACTIVE ROUTE VIEW */}
         {isSignInRoute ? (
-          <AuthView
-            initialTab="signin"
-            returnTo={returnToParam}
-            onNavigate={navigate}
-          />
+          <AuthView initialTab="signin" returnTo={returnToParam} onNavigate={navigate} />
         ) : isSignUpRoute ? (
-          <AuthView
-            initialTab="signup"
-            returnTo={returnToParam}
-            onNavigate={navigate}
-          />
+          <AuthView initialTab="signup" returnTo={returnToParam} onNavigate={navigate} />
         ) : isForgotPasswordRoute ? (
           <ForgotPasswordView onNavigate={navigate} />
         ) : isResetPasswordRoute ? (

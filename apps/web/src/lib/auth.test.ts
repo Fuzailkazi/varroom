@@ -35,19 +35,19 @@ describe("auth validation utilities", () => {
 
     test("rejects usernames longer than 20 characters", () => {
       expect(validateUsername("a".repeat(21))).toBe(
-        "Username must be between 3 and 20 characters."
+        "Username must be between 3 and 20 characters.",
       );
     });
 
     test("rejects invalid characters (spaces, dashes, symbols)", () => {
       expect(validateUsername("jude fan")).toBe(
-        "Usernames can only contain letters, numbers, and underscores."
+        "Usernames can only contain letters, numbers, and underscores.",
       );
       expect(validateUsername("jude-fan")).toBe(
-        "Usernames can only contain letters, numbers, and underscores."
+        "Usernames can only contain letters, numbers, and underscores.",
       );
       expect(validateUsername("jude@fan")).toBe(
-        "Usernames can only contain letters, numbers, and underscores."
+        "Usernames can only contain letters, numbers, and underscores.",
       );
     });
 
@@ -82,15 +82,11 @@ describe("auth validation utilities", () => {
     });
 
     test("rejects passwords shorter than 8 characters", () => {
-      expect(validatePassword("short7!")).toBe(
-        "Password must be at least 8 characters long."
-      );
+      expect(validatePassword("short7!")).toBe("Password must be at least 8 characters long.");
     });
 
     test("rejects passwords longer than 128 characters", () => {
-      expect(validatePassword("p".repeat(129))).toBe(
-        "Password must be at most 128 characters."
-      );
+      expect(validatePassword("p".repeat(129))).toBe("Password must be at most 128 characters.");
     });
   });
 
@@ -124,7 +120,7 @@ describe("auth validation utilities", () => {
 
     test("provides generic security error for 401 unauthenticated", () => {
       expect(normalizeAuthError({ status: 401 })).toBe(
-        "Invalid email/username or password. Double check your credentials."
+        "Invalid email/username or password. Double check your credentials.",
       );
     });
 

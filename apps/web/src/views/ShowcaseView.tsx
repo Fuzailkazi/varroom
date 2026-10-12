@@ -1,8 +1,8 @@
+import type { HealthResponse } from "@varroom/shared";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScoreGauge } from "@/components/var/score-gauge";
-import type { HealthResponse } from "@varroom/shared";
 
 interface ShowcaseViewProps {
   health: HealthResponse | null;
@@ -35,16 +35,12 @@ export function ShowcaseView({
       <section className="bg-[var(--surface)] border-[var(--border-w)] border-[var(--ink)] rounded-md shadow-hard p-5 mb-5">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
-            <h2 className="font-display font-bold text-lg text-[var(--ink)]">
-              Backend API Health
-            </h2>
+            <h2 className="font-display font-bold text-lg text-[var(--ink)]">Backend API Health</h2>
             <div className="font-mono text-xs text-[var(--ink-2)] mt-0.5">
               {healthLoading ? (
                 "Connecting to API via proxy..."
               ) : healthError ? (
-                <span className="text-[var(--danger)] font-bold">
-                  Error: {healthError}
-                </span>
+                <span className="text-[var(--danger)] font-bold">Error: {healthError}</span>
               ) : (
                 <span className="text-[var(--on-lime)] font-bold">
                   Status: {health?.status} · DB: {health?.database}
@@ -52,12 +48,7 @@ export function ShowcaseView({
               )}
             </div>
           </div>
-          <Button
-            variant="white"
-            size="sm"
-            onClick={onRefreshHealth}
-            disabled={healthLoading}
-          >
+          <Button variant="white" size="sm" onClick={onRefreshHealth} disabled={healthLoading}>
             {healthLoading ? "Checking..." : "Ping API"}
           </Button>
         </div>
@@ -65,9 +56,7 @@ export function ShowcaseView({
 
       {/* 2. VERDICT STAMPS */}
       <section className="bg-[var(--surface)] border-[var(--border-w)] border-[var(--ink)] rounded-md shadow-hard p-5 mb-5">
-        <h2 className="font-display font-bold text-lg text-[var(--ink)] mb-3">
-          Verdict Stamps
-        </h2>
+        <h2 className="font-display font-bold text-lg text-[var(--ink)] mb-3">Verdict Stamps</h2>
         <div className="flex gap-2.5 flex-wrap items-center">
           <Badge variant="stands">DECISION STANDS</Badge>
           <Badge variant="overturned">OVERTURNED</Badge>
@@ -153,9 +142,7 @@ export function ShowcaseView({
               <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-[var(--sunken)] border border-[var(--ink)] text-[var(--ink)] shrink-0">
                 E1
               </span>
-              <span>
-                Opta Event #34: 0.14 xA recorded across 6 appearances.
-              </span>
+              <span>Opta Event #34: 0.14 xA recorded across 6 appearances.</span>
             </div>
           )}
         </div>

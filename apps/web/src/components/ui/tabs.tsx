@@ -1,8 +1,5 @@
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-import {
-  forwardRef,
-  type ComponentPropsWithoutRef,
-} from "react";
+import { type ComponentPropsWithoutRef, forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
 export const Tabs = TabsPrimitive.Root;
@@ -16,7 +13,7 @@ export const TabsList = forwardRef<
     className={cn(
       "inline-flex h-11 items-center justify-start rounded-pill p-1 gap-1",
       "bg-[var(--sunken)] text-[var(--ink)] border-[var(--border-w)] border-[var(--ink)]",
-      className
+      className,
     )}
     {...props}
   />
@@ -36,7 +33,7 @@ export const TabsTrigger = forwardRef<
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lime)]",
       "disabled:pointer-events-none disabled:opacity-40",
       "data-[state=active]:bg-[var(--lime)] data-[state=active]:text-[var(--on-lime)] data-[state=active]:border-[var(--border-w)] data-[state=active]:border-[var(--ink)] data-[state=active]:shadow-hard",
-      className
+      className,
     )}
     {...props}
   />
@@ -51,7 +48,7 @@ export const TabsContent = forwardRef<
     ref={ref}
     className={cn(
       "mt-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lime)]",
-      className
+      className,
     )}
     {...props}
   />

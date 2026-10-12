@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { DecisionBanner } from "@/components/var/decision-banner";
 
 export interface ClaimData {
@@ -38,11 +38,11 @@ export function ReviewView({
 
   const [takeText, setTakeText] = useState(
     initialTake ||
-      "“Bellingham is twice the player when deployed as an 8 rather than an isolated false 9.”"
+      "“Bellingham is twice the player when deployed as an 8 rather than an isolated false 9.”",
   );
 
   const [progressLine, setProgressLine] = useState(
-    "Splitting your take into claims... Checking claim 2 of 4..."
+    "Splitting your take into claims... Checking claim 2 of 4...",
   );
   const [progressPercent, setProgressPercent] = useState(60);
 
@@ -50,7 +50,7 @@ export function ReviewView({
   const [openSources, setOpenSources] = useState<Record<number, boolean>>({});
 
   // Dynamic review data fetched from real API
-  const [apiVerdict, setApiVerdict] = useState<string | null>(null);
+  const [_apiVerdict, setApiVerdict] = useState<string | null>(null);
   const [apiScore, setApiScore] = useState<number | null>(null);
   const [apiClaims, setApiClaims] = useState<ClaimData[]>([]);
   const [apiEvidence, setApiEvidence] = useState<EvidenceData[]>([]);
@@ -91,8 +91,8 @@ export function ReviewView({
               data.decision === "OVERTURNED"
                 ? "overturned"
                 : data.decision === "INCONCLUSIVE"
-                ? "incomplete"
-                : "stands"
+                  ? "incomplete"
+                  : "stands",
             );
             if (eventSource) eventSource.close();
             fetchReview(); // Refresh full claims
@@ -110,17 +110,17 @@ export function ReviewView({
             r.credibilityScore !== null && r.credibilityScore !== undefined
               ? r.credibilityScore
               : isFailed
-              ? 50
-              : 24
+                ? 50
+                : 24,
           );
           setApiVerdict(decision || (isFailed ? "INCONCLUSIVE" : null));
           setApiSummary(
             r.summary ||
               (isFailed
-                ? (r.failure?.message
-                    ? `Official check incomplete: ${r.failure.message} (Daily quota reached for Gemini AI free-tier on fresh runs; check verified reviews in the feed).`
-                    : "Check incomplete: upstream AI service unavailable.")
-                : null)
+                ? r.failure?.message
+                  ? `Official check incomplete: ${r.failure.message} (Daily quota reached for Gemini AI free-tier on fresh runs; check verified reviews in the feed).`
+                  : "Check incomplete: upstream AI service unavailable."
+                : null),
           );
 
           if (decision === "OVERTURNED") {
@@ -392,8 +392,8 @@ export function ReviewView({
           </div>
 
           <p className="font-sans text-sm text-[var(--ink-2)] max-w-sm mx-auto">
-            Our sequential referee agents are fact-checking each premise against
-            match statistics and rule interpretations.
+            Our sequential referee agents are fact-checking each premise against match statistics
+            and rule interpretations.
           </p>
         </section>
       ) : (
@@ -404,17 +404,17 @@ export function ReviewView({
               screenState === "overturned"
                 ? "OVERTURNED"
                 : screenState === "stands"
-                ? "DECISION_STANDS"
-                : "CHECK_INCOMPLETE"
+                  ? "DECISION_STANDS"
+                  : "CHECK_INCOMPLETE"
             }
             score={
               apiScore !== null
                 ? apiScore
                 : screenState === "overturned"
-                ? 24
-                : screenState === "stands"
-                ? 92
-                : 51
+                  ? 24
+                  : screenState === "stands"
+                    ? 92
+                    : 51
             }
             confidence="HIGH CONFIDENCE (0.84)"
             reasoning={
@@ -454,8 +454,8 @@ export function ReviewView({
                           isBad
                             ? "bg-[var(--danger)] text-white border-[var(--danger)]"
                             : isGood
-                            ? "bg-[var(--lime)] text-[var(--on-lime)] border-[var(--ink)]"
-                            : "bg-[var(--warning-soft)] text-[var(--warning)] border-[var(--warning)]"
+                              ? "bg-[var(--lime)] text-[var(--on-lime)] border-[var(--ink)]"
+                              : "bg-[var(--warning-soft)] text-[var(--warning)] border-[var(--warning)]"
                         }`}
                       >
                         {claim.rulingLabel}
@@ -474,50 +474,44 @@ export function ReviewView({
                         className="font-sans font-bold text-xs text-[var(--ink)] hover:underline inline-flex items-center gap-1 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lime)] rounded"
                       >
                         {isOpen ? "▲ Hide sources" : "▼ Show sources"} (
-                        {claim.citedLabels.length > 0
-                          ? claim.citedLabels.length
-                          : 2}
-                        )
+                        {claim.citedLabels.length > 0 ? claim.citedLabels.length : 2})
                       </button>
 
                       {isOpen && (
                         <div className="mt-2.5 p-3 bg-[var(--sunken)] border border-[var(--ink)] rounded-sm text-xs font-sans text-[var(--ink-2)] flex flex-col gap-2">
-                          {(claim.citedLabels.length > 0
-                            ? claim.citedLabels
-                            : ["E1", "E2"]
-                          ).map((lbl) => {
-                            const ev = evidenceMap.get(lbl);
-                            return (
-                              <div
-                                key={lbl}
-                                className="flex items-start gap-2 bg-[var(--surface)] p-2 rounded border border-[var(--ink)]/40"
-                              >
-                                <span className="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded bg-[var(--sunken)] border border-[var(--ink)] text-[var(--ink)] shrink-0">
-                                  {lbl}
-                                </span>
-                                <div className="leading-snug">
-                                  <div className="font-bold text-[var(--ink)]">
-                                    {ev?.title || `Evidence ${lbl}`}
-                                  </div>
-                                  {ev?.snippet && (
-                                    <div className="text-[var(--ink-2)] mt-0.5">
-                                      {ev.snippet}
+                          {(claim.citedLabels.length > 0 ? claim.citedLabels : ["E1", "E2"]).map(
+                            (lbl) => {
+                              const ev = evidenceMap.get(lbl);
+                              return (
+                                <div
+                                  key={lbl}
+                                  className="flex items-start gap-2 bg-[var(--surface)] p-2 rounded border border-[var(--ink)]/40"
+                                >
+                                  <span className="font-mono font-bold text-[11px] px-1.5 py-0.5 rounded bg-[var(--sunken)] border border-[var(--ink)] text-[var(--ink)] shrink-0">
+                                    {lbl}
+                                  </span>
+                                  <div className="leading-snug">
+                                    <div className="font-bold text-[var(--ink)]">
+                                      {ev?.title || `Evidence ${lbl}`}
                                     </div>
-                                  )}
-                                  {ev?.url && (
-                                    <a
-                                      href={ev.url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-xs text-[var(--ink)] underline hover:opacity-80 block mt-1 font-mono break-all"
-                                    >
-                                      {ev.url}
-                                    </a>
-                                  )}
+                                    {ev?.snippet && (
+                                      <div className="text-[var(--ink-2)] mt-0.5">{ev.snippet}</div>
+                                    )}
+                                    {ev?.url && (
+                                      <a
+                                        href={ev.url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-xs text-[var(--ink)] underline hover:opacity-80 block mt-1 font-mono break-all"
+                                      >
+                                        {ev.url}
+                                      </a>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            },
+                          )}
                         </div>
                       )}
                     </div>

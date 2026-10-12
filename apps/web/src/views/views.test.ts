@@ -16,10 +16,7 @@ describe("View mapping and feed filtering logic", () => {
         decision = "LIVE";
       } else if (review.decision === "OVERTURNED") {
         decision = "OVERTURNED";
-      } else if (
-        review.decision === "CONFIRMED" ||
-        review.decision === "UPHELD"
-      ) {
+      } else if (review.decision === "CONFIRMED" || review.decision === "UPHELD") {
         decision = "DECISION_STANDS";
       }
     }
@@ -33,7 +30,7 @@ describe("View mapping and feed filtering logic", () => {
 
   function filterFeed(
     items: DebateItem[],
-    filter: "all" | "overturned" | "stands" | "incomplete"
+    filter: "all" | "overturned" | "stands" | "incomplete",
   ): DebateItem[] {
     return items.filter((item) => {
       if (filter === "all") return true;

@@ -20,12 +20,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           "focus-visible:ring-2 focus-visible:ring-[var(--lime)] focus-visible:border-[var(--ink)]",
           "disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed",
           error && "border-[var(--danger)] focus-visible:ring-[var(--danger)]",
-          className
+          className,
         )}
         {...props}
       />
     );
-  }
+  },
 );
 
 Input.displayName = "Input";

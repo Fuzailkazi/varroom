@@ -1,5 +1,5 @@
-import { useState } from "react";
 import { CaretDown, CaretUp } from "@phosphor-icons/react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type DecisionVerdict =
@@ -32,8 +32,8 @@ export function DecisionBanner({
     verdict === "CONFIRMED" || verdict === "UPHELD"
       ? "DECISION_STANDS"
       : verdict === "INCONCLUSIVE"
-      ? "CHECK_INCOMPLETE"
-      : verdict;
+        ? "CHECK_INCOMPLETE"
+        : verdict;
 
   const config = {
     DECISION_STANDS: {
@@ -82,7 +82,7 @@ export function DecisionBanner({
       className={cn(
         "rounded-md border-[var(--border-w)] border-[var(--ink)] shadow-hard p-5 sm:p-6 transition-all duration-150",
         config.bg,
-        className
+        className,
       )}
     >
       {/* Header: Stamp + Score */}
@@ -94,7 +94,7 @@ export function DecisionBanner({
           <span
             className={cn(
               "inline-flex items-center font-display font-extrabold text-base tracking-wide uppercase px-4 py-1.5 rounded-pill border-[var(--border-w-bold)] shadow-hard select-none",
-              config.stampClass
+              config.stampClass,
             )}
           >
             {config.stampText}
@@ -106,7 +106,7 @@ export function DecisionBanner({
             <div
               className={cn(
                 "font-display font-extrabold text-4xl sm:text-5xl leading-none tracking-tight",
-                config.scoreColor
+                config.scoreColor,
               )}
             >
               {score}
@@ -134,7 +134,7 @@ export function DecisionBanner({
           <div
             className={cn(
               "text-sm font-sans text-[var(--ink-2)] leading-relaxed",
-              !isExpanded && "line-clamp-2"
+              !isExpanded && "line-clamp-2",
             )}
           >
             {reasoning}

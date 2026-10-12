@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 
 interface FeedItem {
@@ -15,7 +15,8 @@ const FALLBACK_FEED: FeedItem[] = [
   {
     id: "f-1",
     reviewId: "8c4a4564-7382-4c27-93b0-742e0907d245",
-    statement: "Bellingham is twice the player when deployed as an 8 rather than an isolated false 9.",
+    statement:
+      "Bellingham is twice the player when deployed as an 8 rather than an isolated false 9.",
     decision: "OVERTURNED",
     score: 24,
     timeAgo: "8m ago",
@@ -41,7 +42,8 @@ const FALLBACK_FEED: FeedItem[] = [
   },
   {
     id: "f-4",
-    statement: "Haaland’s 11 touches per 90 makes City vulnerable against Champions League transitions.",
+    statement:
+      "Haaland’s 11 touches per 90 makes City vulnerable against Champions League transitions.",
     decision: "LIVE",
     score: null,
     timeAgo: "3m ago",
@@ -72,9 +74,7 @@ interface FeedViewProps {
 }
 
 export function FeedView({ onNavigate }: FeedViewProps) {
-  const [filter, setFilter] = useState<
-    "all" | "overturned" | "stands" | "incomplete"
-  >("all");
+  const [filter, setFilter] = useState<"all" | "overturned" | "stands" | "incomplete">("all");
   const [feedItems, setFeedItems] = useState<FeedItem[]>(FALLBACK_FEED);
 
   useEffect(() => {
@@ -92,10 +92,7 @@ export function FeedView({ onNavigate }: FeedViewProps) {
                 decision = "LIVE";
               } else if (review.decision === "OVERTURNED") {
                 decision = "OVERTURNED";
-              } else if (
-                review.decision === "CONFIRMED" ||
-                review.decision === "UPHELD"
-              ) {
+              } else if (review.decision === "CONFIRMED" || review.decision === "UPHELD") {
                 decision = "DECISION_STANDS";
               }
             }
@@ -195,37 +192,27 @@ export function FeedView({ onNavigate }: FeedViewProps) {
           const isLive = item.decision === "LIVE";
           const reviewTarget = item.reviewId
             ? `/review/${item.reviewId}`
-            : `/review?take=${encodeURIComponent(item.statement)}${
-                isLive ? "&running=true" : ""
-              }`;
+            : `/review?take=${encodeURIComponent(item.statement)}${isLive ? "&running=true" : ""}`;
 
           return (
-            <div
+            <a
+              href={reviewTarget}
               key={item.id}
-              onClick={() => onNavigate(reviewTarget)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onNavigate(reviewTarget);
-                }
+              onClick={(event) => {
+                event.preventDefault();
+                onNavigate(reviewTarget);
               }}
               className="bg-[var(--surface)] border-[var(--border-w)] border-[var(--ink)] rounded-md shadow-hard p-5 cursor-pointer select-none transition-all duration-100 hover:shadow-hard-lg hover:-translate-x-[1px] hover:-translate-y-[1px] active:translate-x-[2px] active:translate-y-[2px] active:shadow-collapse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lime)]"
             >
               <div className="flex justify-between items-center gap-2 mb-2">
-                {item.decision === "OVERTURNED" && (
-                  <Badge variant="overturned">OVERTURNED</Badge>
-                )}
+                {item.decision === "OVERTURNED" && <Badge variant="overturned">OVERTURNED</Badge>}
                 {item.decision === "DECISION_STANDS" && (
                   <Badge variant="stands">DECISION STANDS</Badge>
                 )}
                 {item.decision === "CHECK_INCOMPLETE" && (
                   <Badge variant="incomplete">CHECK INCOMPLETE</Badge>
                 )}
-                {item.decision === "LIVE" && (
-                  <Badge variant="live">CHECKING NOW...</Badge>
-                )}
+                {item.decision === "LIVE" && <Badge variant="live">CHECKING NOW...</Badge>}
 
                 <span
                   className="font-mono font-bold text-xs sm:text-sm"
@@ -234,10 +221,10 @@ export function FeedView({ onNavigate }: FeedViewProps) {
                       item.decision === "OVERTURNED"
                         ? "var(--danger)"
                         : item.decision === "DECISION_STANDS"
-                        ? "var(--on-lime)"
-                        : item.decision === "LIVE"
-                        ? "var(--violet)"
-                        : "var(--warning)",
+                          ? "var(--on-lime)"
+                          : item.decision === "LIVE"
+                            ? "var(--violet)"
+                            : "var(--warning)",
                   }}
                 >
                   {item.score !== null ? `${item.score} / 100` : "RUNNING"}
@@ -251,7 +238,7 @@ export function FeedView({ onNavigate }: FeedViewProps) {
               <div className="font-sans text-xs text-[var(--ink-3)]">
                 {item.timeAgo} · {item.meta}
               </div>
-            </div>
+            </a>
           );
         })}
       </section>

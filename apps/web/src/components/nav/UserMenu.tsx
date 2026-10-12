@@ -1,5 +1,5 @@
+import { CaretDown, ShieldCheck, SignOut, Warning } from "@phosphor-icons/react";
 import { useState } from "react";
-import { SignOut, ShieldCheck, Warning, CaretDown } from "@phosphor-icons/react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,11 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth";
 
-interface UserMenuProps {
-  onNavigate?: (path: string) => void;
-}
-
-export function UserMenu({ onNavigate }: UserMenuProps) {
+export function UserMenu() {
   const { user, signOut, signOutEverywhere, resendVerificationEmail } = useAuth();
   const [resending, setResending] = useState(false);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
@@ -66,9 +62,7 @@ export function UserMenu({ onNavigate }: UserMenuProps) {
               <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded-pill bg-[var(--sunken)] text-[var(--ink-2)] border border-[var(--line)]">
                 {user.badge || "SPECTATOR"}
               </span>
-              <span className="text-[10px] font-bold text-[var(--ink-3)]">
-                {user.role}
-              </span>
+              <span className="text-[10px] font-bold text-[var(--ink-3)]">{user.role}</span>
             </div>
           </div>
         </DropdownMenuLabel>

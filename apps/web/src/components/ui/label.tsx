@@ -1,5 +1,5 @@
 import * as LabelPrimitive from "@radix-ui/react-label";
-import { forwardRef, type ComponentPropsWithoutRef } from "react";
+import { type ComponentPropsWithoutRef, forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
 export const Label = forwardRef<
@@ -10,7 +10,7 @@ export const Label = forwardRef<
     ref={ref}
     className={cn(
       "font-display text-base font-bold text-[var(--ink)] select-none leading-none",
-      className
+      className,
     )}
     {...props}
   />

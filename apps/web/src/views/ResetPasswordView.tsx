@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
 import { CheckCircle, Eye, EyeSlash, WarningCircle } from "@phosphor-icons/react";
+import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -86,7 +86,8 @@ export function ResetPasswordView({ token, onNavigate }: ResetPasswordViewProps)
             Create new password
           </h1>
           <p className="text-xs sm:text-sm text-[var(--ink-2)] mt-1 leading-relaxed">
-            Choose a strong password (at least 8 characters). Saving will sign out all your active devices.
+            Choose a strong password (at least 8 characters). Saving will sign out all your active
+            devices.
           </p>
         </div>
 
@@ -99,7 +100,8 @@ export function ResetPasswordView({ token, onNavigate }: ResetPasswordViewProps)
                   Password updated!
                 </p>
                 <p className="text-xs text-[var(--ink-2)] mt-1">
-                  Your password was successfully changed. All other device sessions have been revoked.
+                  Your password was successfully changed. All other device sessions have been
+                  revoked.
                 </p>
               </div>
             </div>

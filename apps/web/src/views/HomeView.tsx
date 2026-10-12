@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -16,7 +16,8 @@ const FALLBACK_DEBATES: DebateItem[] = [
   {
     id: "7462f5fb-d549-44f4-bcc1-54b5f5fd10cf",
     reviewId: "8c4a4564-7382-4c27-93b0-742e0907d245",
-    statement: "Bellingham is twice the player when deployed as an 8 rather than an isolated false 9.",
+    statement:
+      "Bellingham is twice the player when deployed as an 8 rather than an isolated false 9.",
     decision: "OVERTURNED",
     score: 24,
     timeAgo: "8m ago",
@@ -42,7 +43,8 @@ const FALLBACK_DEBATES: DebateItem[] = [
   },
   {
     id: "haaland-running",
-    statement: "Haaland’s 11 touches per 90 makes City vulnerable against Champions League transitions.",
+    statement:
+      "Haaland’s 11 touches per 90 makes City vulnerable against Champions League transitions.",
     decision: "LIVE",
     score: null,
     timeAgo: "3m ago",
@@ -57,10 +59,10 @@ interface HomeViewProps {
 
 export function HomeView({ onNavigate, onSubmitTake }: HomeViewProps) {
   const [takeInput, setTakeInput] = useState(
-    "Bellingham is twice the player when deployed as an 8 rather than an isolated false 9."
+    "Bellingham is twice the player when deployed as an 8 rather than an isolated false 9.",
   );
   const [debates, setDebates] = useState<DebateItem[]>(FALLBACK_DEBATES);
-  const [loading, setLoading] = useState(false);
+  const [_loading, setLoading] = useState(false);
 
   useEffect(() => {
     async function loadRecentDebates() {
@@ -78,10 +80,7 @@ export function HomeView({ onNavigate, onSubmitTake }: HomeViewProps) {
                 decision = "LIVE";
               } else if (review.decision === "OVERTURNED") {
                 decision = "OVERTURNED";
-              } else if (
-                review.decision === "CONFIRMED" ||
-                review.decision === "UPHELD"
-              ) {
+              } else if (review.decision === "CONFIRMED" || review.decision === "UPHELD") {
                 decision = "DECISION_STANDS";
               }
             }
@@ -167,32 +166,24 @@ export function HomeView({ onNavigate, onSubmitTake }: HomeViewProps) {
                 }`;
 
             return (
-              <div
+              <a
+                href={reviewTarget}
                 key={item.id}
-                onClick={() => onNavigate(reviewTarget)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onNavigate(reviewTarget);
-                  }
+                onClick={(event) => {
+                  event.preventDefault();
+                  onNavigate(reviewTarget);
                 }}
                 className="block bg-[var(--surface)] border-[var(--border-w)] border-[var(--ink)] rounded-md shadow-hard p-4 sm:p-4.5 cursor-pointer select-none transition-all duration-100 hover:shadow-hard-lg hover:-translate-x-[1px] hover:-translate-y-[1px] active:translate-x-[2px] active:translate-y-[2px] active:shadow-collapse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lime)]"
               >
                 <div className="flex justify-between items-center gap-2 mb-2">
-                  {item.decision === "OVERTURNED" && (
-                    <Badge variant="overturned">OVERTURNED</Badge>
-                  )}
+                  {item.decision === "OVERTURNED" && <Badge variant="overturned">OVERTURNED</Badge>}
                   {item.decision === "DECISION_STANDS" && (
                     <Badge variant="stands">DECISION STANDS</Badge>
                   )}
                   {item.decision === "CHECK_INCOMPLETE" && (
                     <Badge variant="incomplete">CHECK INCOMPLETE</Badge>
                   )}
-                  {item.decision === "LIVE" && (
-                    <Badge variant="live">CHECKING NOW...</Badge>
-                  )}
+                  {item.decision === "LIVE" && <Badge variant="live">CHECKING NOW...</Badge>}
 
                   <span
                     className="font-mono font-bold text-xs sm:text-sm"
@@ -201,10 +192,10 @@ export function HomeView({ onNavigate, onSubmitTake }: HomeViewProps) {
                         item.decision === "OVERTURNED"
                           ? "var(--danger)"
                           : item.decision === "DECISION_STANDS"
-                          ? "var(--on-lime)"
-                          : item.decision === "LIVE"
-                          ? "var(--violet)"
-                          : "var(--warning)",
+                            ? "var(--on-lime)"
+                            : item.decision === "LIVE"
+                              ? "var(--violet)"
+                              : "var(--warning)",
                     }}
                   >
                     {item.score !== null ? `${item.score} / 100` : "RUNNING"}
@@ -218,7 +209,7 @@ export function HomeView({ onNavigate, onSubmitTake }: HomeViewProps) {
                 <div className="font-sans text-xs text-[var(--ink-3)]">
                   {item.timeAgo} · {item.meta}
                 </div>
-              </div>
+              </a>
             );
           })}
         </div>

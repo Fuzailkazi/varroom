@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
 import { Eye, EyeSlash, WarningCircle } from "@phosphor-icons/react";
+import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,11 +13,7 @@ interface AuthViewProps {
   onNavigate: (path: string) => void;
 }
 
-export function AuthView({
-  initialTab = "signin",
-  returnTo,
-  onNavigate,
-}: AuthViewProps) {
+export function AuthView({ initialTab = "signin", returnTo, onNavigate }: AuthViewProps) {
   const { signIn, signUp } = useAuth();
   const [tab, setTab] = useState<"signin" | "signup">(initialTab);
 
@@ -119,9 +115,7 @@ export function AuthView({
         {/* HEADER */}
         <div className="mb-5 text-left">
           <h1 className="font-display font-extrabold text-2xl tracking-tight text-[var(--ink)]">
-            {tab === "signin"
-              ? "Welcome back to the VAR Room"
-              : "Claim your VAR Room whistle"}
+            {tab === "signin" ? "Welcome back to the VAR Room" : "Claim your VAR Room whistle"}
           </h1>
           <p className="text-xs sm:text-sm text-[var(--ink-2)] mt-1 leading-relaxed">
             {tab === "signin"
@@ -239,9 +233,7 @@ export function AuthView({
                 >
                   Username
                 </Label>
-                <span className="text-[10px] text-[var(--ink-3)]">
-                  3–20 chars · immutable
-                </span>
+                <span className="text-[10px] text-[var(--ink-3)]">3–20 chars · immutable</span>
               </div>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--ink-3)] font-mono font-bold text-sm select-none">

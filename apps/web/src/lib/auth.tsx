@@ -1,16 +1,10 @@
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
-import {
+  cleanDisplayName,
   isEmail,
   normalizeAuthError,
   validatePassword,
   validateUsername,
-  cleanDisplayName,
 } from "./auth-utils";
 
 export interface AuthUser {
@@ -59,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshUser = async (): Promise<AuthUser | null> => {
+  const refreshUser = useCallback(async (): Promise<AuthUser | null> => {
     try {
       const res = await fetch("/api/me", {
         credentials: "include",
@@ -77,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshUser();
@@ -91,12 +85,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener("focus", handleFocus);
     };
-  }, []);
+  }, [refreshUser]);
 
-  const signIn = async (
-    identifier: string,
-    password: string
-  ): Promise<AuthResult> => {
+  const signIn = async (identifier: string, password: string): Promise<AuthResult> => {
     setError(null);
     const trimmedId = (identifier || "").trim();
     if (!trimmedId || !password) {
@@ -260,10 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const resetPassword = async (
-    token: string,
-    newPassword: string
-  ): Promise<AuthResult> => {
+  const resetPassword = async (token: string, newPassword: string): Promise<AuthResult> => {
     setError(null);
     const passwordErr = validatePassword(newPassword);
     if (passwordErr) {

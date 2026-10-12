@@ -1,8 +1,5 @@
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
-import {
-  forwardRef,
-  type ComponentPropsWithoutRef,
-} from "react";
+import { type ComponentPropsWithoutRef, forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
@@ -21,7 +18,7 @@ export const DropdownMenuContent = forwardRef<
       className={cn(
         "z-40 min-w-[12rem] overflow-hidden rounded-md border-[var(--border-w)] border-[var(--ink)] p-1.5 shadow-hard",
         "bg-[var(--surface)] text-[var(--ink)]",
-        className
+        className,
       )}
       {...props}
     />
@@ -39,12 +36,12 @@ export const DropdownMenuItem = forwardRef<
       "relative flex cursor-pointer select-none items-center rounded-sm px-3 py-2 font-sans text-sm font-bold outline-none transition-colors",
       "hover:bg-[var(--lime)] hover:text-[var(--on-lime)] focus:bg-[var(--lime)] focus:text-[var(--on-lime)]",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
-      className
+      className,
     )}
     {...props}
   />
 ));
-DropdownMenuItem.displayName = DropdownMenuItem.displayName;
+DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName;
 
 export const DropdownMenuLabel = forwardRef<
   HTMLDivElement,
@@ -54,7 +51,7 @@ export const DropdownMenuLabel = forwardRef<
     ref={ref}
     className={cn(
       "px-3 py-1.5 font-display text-xs font-extrabold uppercase tracking-wider text-[var(--ink-2)]",
-      className
+      className,
     )}
     {...props}
   />

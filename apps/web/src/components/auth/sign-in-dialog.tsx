@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { type FormEvent, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -6,7 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
@@ -18,12 +18,7 @@ interface SignInDialogProps {
   onSuccess?: () => void;
 }
 
-export function SignInDialog({
-  open,
-  onOpenChange,
-  message,
-  onSuccess,
-}: SignInDialogProps) {
+export function SignInDialog({ open, onOpenChange, message, onSuccess }: SignInDialogProps) {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("referee@varroom.dev");
   const [password, setPassword] = useState("Password123!");

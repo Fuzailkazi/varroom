@@ -1,8 +1,7 @@
 import { forwardRef, type TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-export interface TextareaProps
-  extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   error?: boolean;
 }
 
@@ -20,12 +19,12 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           "focus-visible:ring-2 focus-visible:ring-[var(--lime)] focus-visible:border-[var(--ink)]",
           "disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed",
           error && "border-[var(--danger)] focus-visible:ring-[var(--danger)]",
-          className
+          className,
         )}
         {...props}
       />
     );
-  }
+  },
 );
 
 Textarea.displayName = "Textarea";

@@ -7,7 +7,14 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["apps/**/*", "packages/**/*", "package.json", "tsconfig.base.json", "biome.json"]
+    "includes": [
+      "apps/**/*",
+      "packages/**/*",
+      "package.json",
+      "tsconfig.base.json",
+      "biome.json",
+      "!apps/web/mockups"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -26,5 +33,17 @@
         "noNonNullAssertion": "off"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/web/src/index.css"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noUnknownAtRules": "off"
+          }
+        }
+      }
+    }
+  ]
 }
