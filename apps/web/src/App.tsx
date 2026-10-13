@@ -9,6 +9,9 @@ import { useTheme } from "@/lib/theme";
 import { HomeView } from "@/views/HomeView";
 
 const AuthView = lazy(async () => ({ default: (await import("@/views/AuthView")).AuthView }));
+const AccountView = lazy(async () => ({
+  default: (await import("@/views/AccountView")).AccountView,
+}));
 const FeedView = lazy(async () => ({ default: (await import("@/views/FeedView")).FeedView }));
 const ForgotPasswordView = lazy(async () => ({
   default: (await import("@/views/ForgotPasswordView")).ForgotPasswordView,
@@ -70,6 +73,10 @@ export function App() {
       navigate("/sign-in?returnTo=%2F");
       return;
     }
+    if (!user.emailVerified) {
+      setSubmitError("Confirm your email before posting. Check the address in the banner above.");
+      return;
+    }
     if (take.length < 30 || take.length > 1000) {
       setSubmitError("Write a specific take between 30 and 1000 characters.");
       return;
@@ -87,8 +94,19 @@ export function App() {
           tags: [],
         }),
       });
-      if (!debateResponse.ok)
-        throw new Error("We couldn't post your take. Check your account and try again.");
+      if (!debateResponse.ok) {
+        const body = await debateResponse.json().catch(() => null);
+        const code = body?.error?.code;
+        if (code === "EMAIL_NOT_VERIFIED") {
+          throw new Error(
+            "Confirm your email before posting. Check the address in the banner above.",
+          );
+        }
+        if (code === "UNAUTHENTICATED") {
+          throw new Error("Your session expired. Sign in again to post your take.");
+        }
+        throw new Error(body?.error?.message || "We couldn't post your take. Please try again.");
+      }
       const debate = await debateResponse.json();
       if (!debate.id)
         throw new Error("The debate was created without an ID. Please refresh the feed.");
@@ -176,7 +194,7 @@ export function App() {
               {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
             {user ? (
-              <UserMenu />
+              <UserMenu onNavigate={navigate} />
             ) : (
               <Button size="sm" onClick={() => navigate("/sign-in")}>
                 Sign in <ArrowRight size={15} />
@@ -186,7 +204,7 @@ export function App() {
         </div>
       </header>
 
-      <VerificationBanner />
+      <VerificationBanner onNavigate={navigate} />
       <Suspense
         fallback={
           <div className="mx-auto max-w-[1180px] px-4 py-16 text-sm text-[var(--ink-2)]">
@@ -202,6 +220,8 @@ export function App() {
           <div className="auth-shell">
             <AuthView initialTab="signup" returnTo={returnTo} onNavigate={navigate} />
           </div>
+        ) : pathname === "/account" ? (
+          <AccountView onNavigate={navigate} />
         ) : pathname === "/forgot-password" ? (
           <div className="auth-shell">
             <ForgotPasswordView onNavigate={navigate} />

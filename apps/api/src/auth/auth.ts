@@ -174,6 +174,8 @@ export function createAuth(env: Env, sendEmail: SendEmail) {
       },
       // Fans can delete their account (password rule in checkDeleteUser).
       deleteUser: { enabled: true },
+      // Email edits require a confirmation link sent to the new address.
+      changeEmail: { enabled: true },
     },
 
     session: {

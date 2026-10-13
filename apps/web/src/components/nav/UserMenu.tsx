@@ -1,4 +1,4 @@
-import { CaretDown, ShieldCheck, SignOut, Warning } from "@phosphor-icons/react";
+import { CaretDown, PencilSimple, ShieldCheck, SignOut, Warning } from "@phosphor-icons/react";
 import { useState } from "react";
 import {
   DropdownMenu,
@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth";
 
-export function UserMenu() {
+export function UserMenu({ onNavigate }: { onNavigate: (path: string) => void }) {
   const { user, signOut, signOutEverywhere, resendVerificationEmail } = useAuth();
   const [resending, setResending] = useState(false);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
@@ -90,6 +90,13 @@ export function UserMenu() {
 
         {/* ACTIONS */}
         <div className="pt-1">
+          <DropdownMenuItem
+            onClick={() => onNavigate("/account")}
+            className="flex items-center gap-2 cursor-pointer text-xs font-bold"
+          >
+            <PencilSimple className="h-3.5 w-3.5" weight="bold" />
+            <span>Edit account</span>
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => signOut()}
             className="flex items-center gap-2 cursor-pointer text-xs font-bold"

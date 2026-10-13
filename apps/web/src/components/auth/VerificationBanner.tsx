@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 
-export function VerificationBanner() {
+export function VerificationBanner({ onNavigate }: { onNavigate: (path: string) => void }) {
   const { user, resendVerificationEmail } = useAuth();
   const [resending, setResending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -17,7 +17,9 @@ export function VerificationBanner() {
     setResending(false);
     if (ok) {
       setStatus(
-        "Confirmation email dispatched! Check your spam folder if it doesn't arrive in 60s.",
+        import.meta.env.DEV
+          ? "Verification link printed in the API terminal. Check that the address below is correct."
+          : "Confirmation email dispatched! Check your spam folder if it doesn't arrive in 60s.",
       );
     } else {
       setStatus("Failed to send verification email. Please try again shortly.");
@@ -34,21 +36,28 @@ export function VerificationBanner() {
           </p>
           <p className="text-xs text-[var(--ink-2)] mt-0.5">
             {status ||
-              `We sent a link to ${user.email}. Reading is unlocked, but write permissions remain paused.`}
+              (import.meta.env.DEV
+                ? `Development mode: the verification link for ${user.email} is printed in the API terminal. Posting stays paused until you open it.`
+                : `We sent a link to ${user.email}. Reading is unlocked, but write permissions remain paused.`)}
           </p>
         </div>
       </div>
 
-      <Button
-        type="button"
-        variant="white"
-        size="sm"
-        onClick={handleResend}
-        disabled={resending}
-        className="shrink-0 text-xs font-bold border-[var(--ink)] bg-[var(--surface)] hover:bg-[var(--sunken)]"
-      >
-        {resending ? "Sending..." : "Resend Link →"}
-      </Button>
+      <div className="flex shrink-0 gap-2">
+        <Button type="button" variant="white" size="sm" onClick={() => onNavigate("/account")}>
+          Edit email
+        </Button>
+        <Button
+          type="button"
+          variant="white"
+          size="sm"
+          onClick={handleResend}
+          disabled={resending}
+          className="text-xs font-bold border-[var(--ink)] bg-[var(--surface)] hover:bg-[var(--sunken)]"
+        >
+          {resending ? "Sending..." : "Resend Link →"}
+        </Button>
+      </div>
     </div>
   );
 }
