@@ -33,7 +33,7 @@ export function ForgotPasswordView({ onNavigate }: ForgotPasswordViewProps) {
 
   return (
     <div className="flex flex-col items-center justify-center pt-2 pb-12 animate-in fade-in-50 duration-200">
-      <div className="w-full max-w-[440px] bg-[var(--surface)] text-[var(--ink)] border-[var(--border-w)] border-[var(--ink)] rounded-md shadow-hard p-6 sm:p-7">
+      <div className="auth-form-card max-w-[520px]">
         <div className="mb-5 text-left">
           <h1 className="font-display font-extrabold text-2xl tracking-tight text-[var(--ink)]">
             Reset your password

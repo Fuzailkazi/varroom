@@ -78,8 +78,27 @@ export function AuthView({ initialTab = "signin", returnTo, onNavigate }: AuthVi
   };
 
   return (
-    <div className="flex flex-col items-center justify-center pt-2 pb-12 animate-in fade-in-50 duration-200">
-      <div className="w-full max-w-[440px] bg-[var(--surface)] text-[var(--ink)] border-[var(--border-w)] border-[var(--ink)] rounded-md shadow-hard p-6 sm:p-7">
+    <div className="auth-layout animate-in fade-in-50 duration-200">
+      <aside className="auth-story">
+        <div className="eyebrow text-[var(--lime)]">
+          <span className="live-dot" /> JOIN THE CONVERSATION
+        </div>
+        <h2 className="mt-7 font-display text-[clamp(2.8rem,5vw,4.8rem)] font-extrabold leading-[.98] tracking-[-.055em] text-white">
+          Good takes
+          <br />
+          need good
+          <br />
+          <span className="text-[var(--lime)]">evidence.</span>
+        </h2>
+        <p className="mt-6 max-w-[390px] text-sm leading-relaxed text-[var(--hero-muted)]">
+          Make your case, follow each source, and see where the decision lands. Your next football
+          argument starts here.
+        </p>
+        <div className="mt-10 border-t border-white/20 pt-4 font-mono text-[10px] font-bold uppercase tracking-[.17em] text-[var(--hero-muted)]">
+          VAR ROOM / THE PEOPLE'S DECISION DESK
+        </div>
+      </aside>
+      <div className="auth-form-card">
         {/* SEGMENTED TABS */}
         <div className="grid grid-cols-2 p-1 bg-[var(--sunken)] rounded-pill border border-[var(--line)] mb-6">
           <button
@@ -119,8 +138,8 @@ export function AuthView({ initialTab = "signin", returnTo, onNavigate }: AuthVi
           </h1>
           <p className="text-xs sm:text-sm text-[var(--ink-2)] mt-1 leading-relaxed">
             {tab === "signin"
-              ? "Check decisions, defend your takes, and rise through the pundit ranks."
-              : "Join the only football board where claims are audited by cold hard evidence."}
+              ? "Sign in to post your take and follow the verdict."
+              : "Create an account to join the discussion and start a review."}
           </p>
         </div>
 

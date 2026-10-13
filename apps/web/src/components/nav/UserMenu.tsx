@@ -42,7 +42,7 @@ export function UserMenu() {
             @{user.displayUsername || user.username}
           </span>
           <span className="bg-[var(--lime)] text-[var(--on-lime)] font-mono text-[10px] font-extrabold px-1.5 py-0.2 rounded-pill border border-[var(--ink)]">
-            {user.tacticalIqScore || 50} IQ
+            {user.tacticalIqScore != null ? `${user.tacticalIqScore} IQ` : "UNRATED"}
           </span>
           <CaretDown className="h-3 w-3 text-[var(--ink-2)]" weight="bold" />
         </button>

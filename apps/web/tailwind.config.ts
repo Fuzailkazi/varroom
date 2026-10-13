@@ -6,6 +6,10 @@ export default {
   theme: {
     extend: {
       colors: {
+        border: "var(--line)",
+        background: "var(--paper)",
+        foreground: "var(--ink)",
+        primary: { DEFAULT: "var(--lime)", foreground: "var(--on-lime)" },
         lime: {
           DEFAULT: "var(--lime)",
           hover: "var(--lime-hover)",
