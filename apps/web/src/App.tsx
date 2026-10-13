@@ -1,43 +1,39 @@
+import { ArrowRight, Moon, Sun, Television } from "@phosphor-icons/react";
 import { HealthResponse } from "@varroom/shared";
-import { useCallback, useEffect, useState } from "react";
-import { SignInDialog } from "@/components/auth/sign-in-dialog";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { VerificationBanner } from "@/components/auth/VerificationBanner";
 import { UserMenu } from "@/components/nav/UserMenu";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
-import { AuthView } from "@/views/AuthView";
-import { FeedView } from "@/views/FeedView";
-import { ForgotPasswordView } from "@/views/ForgotPasswordView";
 import { HomeView } from "@/views/HomeView";
-import { ResetPasswordView } from "@/views/ResetPasswordView";
-import { ReviewView } from "@/views/ReviewView";
-import { ShowcaseView } from "@/views/ShowcaseView";
+
+const AuthView = lazy(async () => ({ default: (await import("@/views/AuthView")).AuthView }));
+const FeedView = lazy(async () => ({ default: (await import("@/views/FeedView")).FeedView }));
+const ForgotPasswordView = lazy(async () => ({
+  default: (await import("@/views/ForgotPasswordView")).ForgotPasswordView,
+}));
+const ResetPasswordView = lazy(async () => ({
+  default: (await import("@/views/ResetPasswordView")).ResetPasswordView,
+}));
+const ReviewView = lazy(async () => ({ default: (await import("@/views/ReviewView")).ReviewView }));
+const ShowcaseView = lazy(async () => ({
+  default: (await import("@/views/ShowcaseView")).ShowcaseView,
+}));
+
+function currentLocation() {
+  return { pathname: window.location.pathname || "/", search: window.location.search || "" };
+}
 
 export function App() {
   const { resolvedTheme, setTheme } = useTheme();
   const { user } = useAuth();
-  const [signInOpen, setSignInOpen] = useState(false);
-  const [signInMessage] = useState<string | undefined>(undefined);
-  const [pendingTake, setPendingTake] = useState<string | null>(null);
-
-  // Route state derived from window.location
-  const [currentPath, setCurrentPath] = useState<string>(() => {
-    if (typeof window === "undefined") return "/";
-    return window.location.pathname || "/";
-  });
-  const [searchQuery, setSearchQuery] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return window.location.search || "";
-  });
-
-  // Active review parameters
-  const [activeReviewId, setActiveReviewId] = useState<string | undefined>(undefined);
-  const [activeTake, setActiveTake] = useState<string | undefined>(undefined);
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-
-  // API Health status
+  const [location, setLocation] = useState(currentLocation);
+  const [draft, setDraft] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [healthLoading, setHealthLoading] = useState(true);
+  const [healthLoading, setHealthLoading] = useState(false);
   const [healthError, setHealthError] = useState<string | null>(null);
 
   const fetchHealth = useCallback(async () => {
@@ -45,302 +41,214 @@ export function App() {
     setHealthError(null);
     try {
       const response = await fetch("/api/health");
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      const data = await response.json();
-      const parsed = HealthResponse.parse(data);
-      setHealth(parsed);
-    } catch (err: any) {
-      setHealthError(err.message || "Failed to reach backend API");
+      if (!response.ok) throw new Error(`API returned ${response.status}`);
+      setHealth(HealthResponse.parse(await response.json()));
+    } catch (cause) {
+      setHealthError(cause instanceof Error ? cause.message : "API unavailable");
     } finally {
       setHealthLoading(false);
     }
   }, []);
 
-  const parseUrl = useCallback((pathname: string, search: string) => {
-    console.log("[VAR ROOM] parseUrl:", pathname, search);
-    setCurrentPath(pathname);
-    setSearchQuery(search);
-
-    // Extract query params
-    const params = new URLSearchParams(search);
-    const takeParam = params.get("take");
-    const runningParam = params.get("running");
-    if (takeParam) {
-      setActiveTake(takeParam);
-    }
-    if (runningParam === "true") {
-      setIsRunning(true);
-    }
-
-    // Check review/:id pattern
-    const reviewMatch = pathname.match(/^\/review\/([^/]+)/);
-    if (reviewMatch) {
-      setActiveReviewId(reviewMatch[1]);
-    } else {
-      const idParam = params.get("id") || params.get("reviewId");
-      if (idParam) {
-        setActiveReviewId(idParam);
-      }
-    }
+  useEffect(() => {
+    const onPopState = () => setLocation(currentLocation());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  useEffect(() => {
-    console.log("[VAR ROOM] App mounted, path:", window.location.pathname);
-    fetchHealth();
-  }, [fetchHealth]);
-
-  // Sync route on popstate (browser back/forward)
-  useEffect(() => {
-    const handlePopState = () => {
-      console.log("[VAR ROOM] popstate:", window.location.pathname);
-      parseUrl(window.location.pathname, window.location.search);
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    parseUrl(window.location.pathname, window.location.search);
-
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [parseUrl]);
-
   function navigate(to: string) {
-    console.log("[VAR ROOM] navigate to:", to);
-    if (typeof window !== "undefined") {
-      window.history.pushState(null, "", to);
-      const url = new URL(to, window.location.origin);
-      parseUrl(url.pathname, url.search);
-      window.scrollTo(0, 0);
-    }
+    window.history.pushState(null, "", to);
+    setLocation(currentLocation());
+    window.scrollTo({ top: 0, behavior: "instant" });
   }
 
   async function handleTakeSubmit(take: string) {
-    console.log("[VAR ROOM] handleTakeSubmit called with:", take);
-    setActiveTake(take);
-
-    // 1. If not signed in, redirect to sign-in page with returnTo
+    if (submitting) return;
+    setSubmitError(null);
+    setDraft(take);
     if (!user) {
-      setPendingTake(take);
-      navigate(`/sign-in?returnTo=${encodeURIComponent(currentPath)}`);
+      navigate("/sign-in?returnTo=%2F");
       return;
     }
-
-    // 2. User is signed in: create real debate & start real review
-    setIsRunning(true);
+    if (take.length < 30 || take.length > 1000) {
+      setSubmitError("Write a specific take between 30 and 1000 characters.");
+      return;
+    }
+    setSubmitting(true);
     try {
-      const cleanTitle = take.length > 100 ? `${take.slice(0, 97)}...` : take;
-      const cleanThesis =
-        take.length >= 30
-          ? take
-          : `${take} (analyzed against current Premier League and Champions League data).`;
-
-      const debateRes = await fetch("/api/debates", {
+      const debateResponse = await fetch("/api/debates", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: cleanTitle,
-          thesis: cleanThesis,
+          title: take.replace(/[\r\n]+/g, " ").slice(0, 120),
+          thesis: take,
           categories: ["TACTICAL"],
           tags: [],
         }),
       });
-
-      if (debateRes.ok) {
-        const debate = await debateRes.json();
-        if (debate.id) {
-          // Start review
-          const revRes = await fetch(`/api/debates/${debate.id}/reviews`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-          });
-
-          if (revRes.ok) {
-            const revData = await revRes.json();
-            if (revData.review?.id) {
-              setActiveReviewId(revData.review.id);
-              navigate(`/review/${revData.review.id}`);
-              return;
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Failed to post debate or start review:", err);
-    }
-
-    // Fallback: search existing reviews or open review in progress mode
-    const lower = take.toLowerCase();
-    try {
-      const res = await fetch("/api/debates?limit=50");
-      if (res.ok) {
-        const data = await res.json();
-        const items = data.items || [];
-        const match = items.find((item: any) => {
-          const t = (item.thesis || item.title || "").toLowerCase();
-          return (
-            t.includes(lower) ||
-            lower.includes(t) ||
-            (lower.includes("bellingham") && t.includes("bellingham")) ||
-            (lower.includes("pedri") && t.includes("pedri")) ||
-            (lower.includes("saka") && t.includes("saka")) ||
-            (lower.includes("odegaard") && t.includes("odegaard")) ||
-            (lower.includes("rice") && t.includes("rice")) ||
-            (lower.includes("rodri") && t.includes("rodri"))
+      if (!debateResponse.ok)
+        throw new Error("We couldn't post your take. Check your account and try again.");
+      const debate = await debateResponse.json();
+      if (!debate.id)
+        throw new Error("The debate was created without an ID. Please refresh the feed.");
+      const reviewResponse = await fetch(`/api/debates/${debate.id}/reviews`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!reviewResponse.ok) {
+        if (reviewResponse.status === 429) {
+          throw new Error(
+            "Your take was posted, but today's review limit has been reached. Find it in the community feed.",
           );
-        });
-
-        if (match?.latestReview) {
-          setActiveReviewId(match.latestReview.id);
-          navigate(`/review/${match.latestReview.id}`);
-          return;
         }
+        throw new Error(
+          "Your take was posted, but the review could not start. It is still in the community feed.",
+        );
       }
-    } catch {}
-
-    if (lower.includes("bellingham")) {
-      setActiveReviewId("97027611-b07c-4156-95f0-4c63029be749");
-      navigate("/review/97027611-b07c-4156-95f0-4c63029be749");
-    } else if (lower.includes("pedri")) {
-      setActiveReviewId("5abdc9a4-66c3-42c6-98ee-3fe002c299df");
-      navigate("/review/5abdc9a4-66c3-42c6-98ee-3fe002c299df");
-    } else {
-      navigate(`/review?take=${encodeURIComponent(take)}&running=true`);
+      const result = await reviewResponse.json();
+      if (!result.review?.id)
+        throw new Error("The review could not start. Find your take in the community feed.");
+      setDraft("");
+      navigate(`/review/${result.review.id}`);
+    } catch (cause) {
+      setSubmitError(
+        cause instanceof Error ? cause.message : "Something went wrong. Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
     }
   }
 
-  // Determine active view
-  const isSignInRoute = currentPath === "/sign-in";
-  const isSignUpRoute = currentPath === "/sign-up";
-  const isForgotPasswordRoute = currentPath === "/forgot-password";
-  const isResetPasswordRoute = currentPath.startsWith("/reset-password");
-  const isReviewRoute = currentPath.startsWith("/review");
-  const isFeedRoute = currentPath === "/feed";
-  const isShowcaseRoute = currentPath === "/showcase";
-
-  const returnToParam = new URLSearchParams(searchQuery).get("returnTo") || undefined;
-  const resetTokenParam =
-    new URLSearchParams(searchQuery).get("token") ||
-    currentPath.match(/^\/reset-password\/([^/?]+)/)?.[1];
+  const { pathname, search } = location;
+  const query = new URLSearchParams(search);
+  const reviewId = pathname.match(/^\/review\/([^/]+)/)?.[1] || query.get("id") || undefined;
+  const isReview = pathname.startsWith("/review");
+  const isFeed = pathname === "/feed";
+  const isShowcase = pathname === "/showcase" && import.meta.env.DEV;
+  const returnTo = query.get("returnTo") || undefined;
+  const resetToken = query.get("token") || pathname.match(/^\/reset-password\/([^/?]+)/)?.[1];
 
   return (
-    <div className="min-h-screen bg-[var(--paper)] text-[var(--ink)] antialiased transition-colors duration-150 p-4">
-      <div className="max-w-[680px] mx-auto pb-16">
-        {/* MINIMAL TOP NAVIGATION */}
-        <nav className="flex justify-between items-center py-3 mb-7 border-b border-[var(--border-w)] border-[var(--line)]">
+    <div className="min-h-screen bg-[var(--paper)] text-[var(--ink)] antialiased">
+      <header className="site-header">
+        <div className="mx-auto flex max-w-[1340px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <button
             type="button"
             onClick={() => navigate("/")}
-            className="inline-flex items-center gap-2 font-display font-extrabold text-xl tracking-tight text-[var(--ink)] hover:opacity-80 cursor-pointer"
+            className="brand-lockup"
+            aria-label="VAR Room home"
           >
-            VAR ROOM
-            <span className="bg-[var(--lime)] text-[var(--on-lime)] text-[11px] font-extrabold px-2 py-0.5 rounded-pill border border-[var(--ink)]">
-              REFEREE
+            <span className="brand-icon">
+              <Television size={22} weight="bold" />
+            </span>
+            <span className="font-display text-xl font-extrabold tracking-[-.055em] text-white sm:text-2xl">
+              VAR<span className="text-[var(--lime)]">ROOM</span>
+            </span>
+            <span className="brand-divider hidden sm:block" />
+            <span className="hidden font-mono text-[10px] font-bold uppercase tracking-[.2em] text-[var(--hero-muted)] sm:block">
+              Football, verified.
             </span>
           </button>
-
-          <div className="flex items-center gap-3 text-sm font-bold text-[var(--ink-2)]">
+          <nav className="flex items-center gap-2 sm:gap-4" aria-label="Main navigation">
             <button
               type="button"
               onClick={() => navigate("/feed")}
-              className={`hover:text-[var(--ink)] cursor-pointer ${
-                isFeedRoute ? "text-[var(--ink)] underline" : ""
-              }`}
+              aria-current={isFeed ? "page" : undefined}
+              className={`nav-link ${isFeed ? "is-active" : ""}`}
             >
-              Feed
+              The feed
             </button>
             <button
               type="button"
-              onClick={() => navigate("/review")}
-              className={`hover:text-[var(--ink)] cursor-pointer ${
-                isReviewRoute ? "text-[var(--ink)] underline" : ""
-              }`}
+              onClick={() => navigate("/")}
+              className="nav-link hidden sm:inline-flex"
             >
-              Review
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/showcase")}
-              className={`hover:text-[var(--ink)] cursor-pointer ${
-                isShowcaseRoute ? "text-[var(--ink)] underline" : ""
-              }`}
-            >
-              Styles
+              Home
             </button>
             <button
               type="button"
               onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-              aria-label="Toggle color theme"
-              className="bg-[var(--surface)] text-[var(--ink)] border border-[var(--ink)] px-2.5 py-1 rounded-pill text-xs font-bold cursor-pointer shadow-collapse hover:bg-[var(--sunken)] active:translate-x-[1px] active:translate-y-[1px]"
+              aria-label={resolvedTheme === "dark" ? "Use light theme" : "Use dark theme"}
+              className="theme-button hidden sm:grid"
             >
-              {resolvedTheme === "dark" ? "☀️ LIGHT" : "🌙 DARK"}
+              {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-
             {user ? (
               <UserMenu />
             ) : (
-              <button
-                type="button"
-                onClick={() => navigate("/sign-in")}
-                className="bg-[var(--lime)] text-[var(--on-lime)] border border-[var(--ink)] px-3 py-1 rounded-pill text-xs font-bold cursor-pointer shadow-collapse hover:brightness-105 active:translate-x-[1px] active:translate-y-[1px]"
-              >
-                Sign In
-              </button>
+              <Button size="sm" onClick={() => navigate("/sign-in")}>
+                Sign in <ArrowRight size={15} />
+              </Button>
             )}
+          </nav>
+        </div>
+      </header>
+
+      <VerificationBanner />
+      <Suspense
+        fallback={
+          <div className="mx-auto max-w-[1180px] px-4 py-16 text-sm text-[var(--ink-2)]">
+            Loading the room…
           </div>
-        </nav>
-
-        {/* VERIFICATION WARNING BANNER */}
-        <VerificationBanner />
-
-        {/* ACTIVE ROUTE VIEW */}
-        {isSignInRoute ? (
-          <AuthView initialTab="signin" returnTo={returnToParam} onNavigate={navigate} />
-        ) : isSignUpRoute ? (
-          <AuthView initialTab="signup" returnTo={returnToParam} onNavigate={navigate} />
-        ) : isForgotPasswordRoute ? (
-          <ForgotPasswordView onNavigate={navigate} />
-        ) : isResetPasswordRoute ? (
-          <ResetPasswordView token={resetTokenParam} onNavigate={navigate} />
-        ) : isReviewRoute ? (
+        }
+      >
+        {pathname === "/sign-in" ? (
+          <div className="auth-shell">
+            <AuthView initialTab="signin" returnTo={returnTo} onNavigate={navigate} />
+          </div>
+        ) : pathname === "/sign-up" ? (
+          <div className="auth-shell">
+            <AuthView initialTab="signup" returnTo={returnTo} onNavigate={navigate} />
+          </div>
+        ) : pathname === "/forgot-password" ? (
+          <div className="auth-shell">
+            <ForgotPasswordView onNavigate={navigate} />
+          </div>
+        ) : pathname.startsWith("/reset-password") ? (
+          <div className="auth-shell">
+            <ResetPasswordView token={resetToken} onNavigate={navigate} />
+          </div>
+        ) : isReview ? (
           <ReviewView
-            key={activeReviewId || activeTake || "review"}
-            reviewId={activeReviewId}
-            initialTake={activeTake}
-            initialRunning={isRunning}
+            key={reviewId || "review"}
+            reviewId={reviewId}
+            initialTake={query.get("take") || undefined}
             onBackToHome={() => navigate("/")}
           />
-        ) : isFeedRoute ? (
+        ) : isFeed ? (
           <FeedView onNavigate={navigate} />
-        ) : isShowcaseRoute ? (
-          <ShowcaseView
-            health={health}
-            healthLoading={healthLoading}
-            healthError={healthError}
-            onRefreshHealth={fetchHealth}
-          />
+        ) : isShowcase ? (
+          <div className="auth-shell">
+            <ShowcaseView
+              health={health}
+              healthLoading={healthLoading}
+              healthError={healthError}
+              onRefreshHealth={fetchHealth}
+            />
+          </div>
         ) : (
-          <HomeView onNavigate={navigate} onSubmitTake={handleTakeSubmit} />
+          <HomeView
+            onNavigate={navigate}
+            onSubmitTake={handleTakeSubmit}
+            initialTake={draft}
+            submitError={submitError}
+            submitting={submitting}
+          />
         )}
+      </Suspense>
 
-        <SignInDialog
-          open={signInOpen}
-          onOpenChange={setSignInOpen}
-          message={signInMessage}
-          onSuccess={() => {
-            if (pendingTake) {
-              const take = pendingTake;
-              setPendingTake(null);
-              handleTakeSubmit(take);
-            }
-          }}
-        />
-      </div>
+      <footer className="site-footer">
+        <div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-4 px-4 py-7 sm:px-6 lg:px-8">
+          <div className="font-display text-lg font-extrabold tracking-tight">
+            VAR<span className="text-[var(--lime-deep)]">ROOM</span>
+          </div>
+          <p className="text-xs text-[var(--ink-3)]">
+            Football opinions deserve evidence. © {new Date().getFullYear()} VAR Room.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
