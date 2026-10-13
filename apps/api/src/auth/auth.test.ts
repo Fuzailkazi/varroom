@@ -133,6 +133,42 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
     });
   });
 
+  test("an unverified fan can correct their email and verify the new address", async () => {
+    const fan = new Fan(baseUrl);
+    const details = newFanDetails();
+    expect((await signUp(fan, details)).response.status).toBe(200);
+
+    const correctedEmail = `corrected.${details.tag}@test.varroom.dev`;
+    const changed = await fan.call("/api/auth/change-email", {
+      body: { newEmail: correctedEmail },
+    });
+    expect(changed.status).toBe(200);
+    expect(getLastEmail(correctedEmail)).toBeDefined();
+
+    const before = await getMe(fan);
+    expect(before.profile?.email).toBe(details.email);
+    expect(before.profile?.emailVerified).toBe(false);
+
+    await clickConfirmationLink(correctedEmail);
+    const after = await getMe(fan);
+    expect(after.profile?.email).toBe(correctedEmail);
+    expect(after.profile?.emailVerified).toBe(true);
+  });
+
+  test("a fan can edit their display name without changing their username", async () => {
+    const fan = new Fan(baseUrl);
+    const details = newFanDetails();
+    expect((await signUp(fan, details)).response.status).toBe(200);
+
+    const changed = await fan.call("/api/auth/update-user", {
+      body: { name: "  New Display Name  " },
+    });
+    expect(changed.status).toBe(200);
+    expect(await getMe(fan)).toMatchObject({
+      profile: { displayName: "New Display Name", username: details.username },
+    });
+  });
+
   describe("sign up rules", () => {
     test("refuses an empty display name", async () => {
       const { response } = await signUp(new Fan(baseUrl), { ...newFanDetails(), name: "   " });

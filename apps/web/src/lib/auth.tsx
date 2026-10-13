@@ -40,6 +40,8 @@ export interface AuthContextValue {
   }) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   signOutEverywhere: () => Promise<void>;
+  updateDisplayName: (name: string) => Promise<AuthResult>;
+  changeEmail: (email: string) => Promise<AuthResult>;
   requestPasswordReset: (email: string) => Promise<AuthResult>;
   resetPassword: (token: string, newPassword: string) => Promise<AuthResult>;
   resendVerificationEmail: () => Promise<boolean>;
@@ -220,6 +222,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateDisplayName = async (name: string): Promise<AuthResult> => {
+    const cleanedName = cleanDisplayName(name);
+    if (!cleanedName) {
+      return { success: false, error: "Display name must be between 1 and 50 characters." };
+    }
+
+    try {
+      const res = await fetch("/api/auth/update-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: cleanedName }),
+      });
+      if (!res.ok) {
+        return { success: false, error: normalizeAuthError(await res.json().catch(() => null)) };
+      }
+      await refreshUser();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: normalizeAuthError(err) };
+    }
+  };
+
+  const changeEmail = async (email: string): Promise<AuthResult> => {
+    const newEmail = email.trim().toLowerCase();
+    if (!isEmail(newEmail)) {
+      return { success: false, error: "Enter a valid email address." };
+    }
+    if (newEmail === user?.email.toLowerCase()) {
+      return { success: false, error: "Enter a different email address." };
+    }
+
+    try {
+      const res = await fetch("/api/auth/change-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ newEmail }),
+      });
+      if (!res.ok) {
+        return { success: false, error: normalizeAuthError(await res.json().catch(() => null)) };
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: normalizeAuthError(err) };
+    }
+  };
+
   const requestPasswordReset = async (email: string): Promise<AuthResult> => {
     setError(null);
     if (!isEmail(email)) {
@@ -311,6 +361,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp,
         signOut,
         signOutEverywhere,
+        updateDisplayName,
+        changeEmail,
         requestPasswordReset,
         resetPassword,
         resendVerificationEmail,
