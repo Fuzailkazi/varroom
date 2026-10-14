@@ -88,8 +88,8 @@ function randomMissingEmail() {
 // the tests
 
 describe.skipIf(!hasTestDatabase)("sign in", () => {
-  describe("sign up, confirm, then write", () => {
-    test("a new fan is signed in, unconfirmed, and unlocked by the email link", async () => {
+  describe("sign up and write", () => {
+    test("a new fan is signed in and can write without confirming email", async () => {
       const fan = new Fan(baseUrl);
       const details = newFanDetails();
 
@@ -111,29 +111,20 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
         tacticalIqScore: 50,
       });
 
-      // A "verified only" route refuses the fan for now.
-      const blocked = await fan.call("/api/_test/verified-ping", { body: {} });
-      expect(blocked.status).toBe(403);
-      expect(await ourErrorCode(blocked)).toBe("EMAIL_NOT_VERIFIED");
-
-      // After clicking the link, the same request works.
-      await clickConfirmationLink(details.email);
-      const allowed = await fan.call("/api/_test/verified-ping", { body: {} });
+      expect(getLastEmail(details.email)).toBeUndefined();
+      const allowed = await fan.call("/api/_test/session-ping", { body: {} });
       expect(allowed.status).toBe(200);
-
-      const after = await getMe(fan);
-      expect(after.profile?.emailVerified).toBe(true);
     });
 
-    test("a verified only route answers 401 in our error shape without a session", async () => {
+    test("a write route answers 401 in our error shape without a session", async () => {
       const stranger = new Fan(baseUrl);
-      const response = await stranger.call("/api/_test/verified-ping", { body: {} });
+      const response = await stranger.call("/api/_test/session-ping", { body: {} });
       expect(response.status).toBe(401);
       expect(await ourErrorCode(response)).toBe("UNAUTHENTICATED");
     });
   });
 
-  test("an unverified fan can correct their email and verify the new address", async () => {
+  test("an unverified fan can correct their email immediately", async () => {
     const fan = new Fan(baseUrl);
     const details = newFanDetails();
     expect((await signUp(fan, details)).response.status).toBe(200);
@@ -143,16 +134,11 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
       body: { newEmail: correctedEmail },
     });
     expect(changed.status).toBe(200);
-    expect(getLastEmail(correctedEmail)).toBeDefined();
+    expect(getLastEmail(correctedEmail)).toBeUndefined();
 
-    const before = await getMe(fan);
-    expect(before.profile?.email).toBe(details.email);
-    expect(before.profile?.emailVerified).toBe(false);
-
-    await clickConfirmationLink(correctedEmail);
     const after = await getMe(fan);
     expect(after.profile?.email).toBe(correctedEmail);
-    expect(after.profile?.emailVerified).toBe(true);
+    expect(after.profile?.emailVerified).toBe(false);
   });
 
   test("a fan can edit their display name without changing their username", async () => {
@@ -450,21 +436,22 @@ describe.skipIf(!hasTestDatabase)("sign in", () => {
     });
   });
 
-  describe("confirmation email again, and password reset", () => {
-    test("a fan can ask for the confirmation link again", async () => {
+  describe("email changes and password reset", () => {
+    test("changing a previously verified address still requires a link", async () => {
       const fan = new Fan(baseUrl);
       const { details } = await signUp(fan);
-      const firstEmail = getLastEmail(details.email);
+      await prisma.user.update({ where: { email: details.email }, data: { emailVerified: true } });
+      const newEmail = `changed.${details.tag}@test.varroom.dev`;
 
-      const response = await fan.call("/api/auth/send-verification-email", {
-        body: { email: details.email },
+      const response = await fan.call("/api/auth/change-email", {
+        body: { newEmail },
       });
       expect(response.status).toBe(200);
+      expect(getLastEmail(newEmail)).toBeDefined();
+      expect((await getMe(fan)).profile?.email).toBe(details.email);
 
-      const secondEmail = getLastEmail(details.email);
-      expect(secondEmail).not.toBe(firstEmail);
-
-      await clickConfirmationLink(details.email);
+      await clickConfirmationLink(newEmail);
+      expect((await getMe(fan)).profile?.email).toBe(newEmail);
       expect((await getMe(fan)).profile?.emailVerified).toBe(true);
     });
 

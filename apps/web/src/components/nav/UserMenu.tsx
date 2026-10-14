@@ -1,5 +1,4 @@
-import { CaretDown, PencilSimple, ShieldCheck, SignOut, Warning } from "@phosphor-icons/react";
-import { useState } from "react";
+import { CaretDown, PencilSimple, ShieldCheck, SignOut } from "@phosphor-icons/react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,25 +9,9 @@ import {
 import { useAuth } from "@/lib/auth";
 
 export function UserMenu({ onNavigate }: { onNavigate: (path: string) => void }) {
-  const { user, signOut, signOutEverywhere, resendVerificationEmail } = useAuth();
-  const [resending, setResending] = useState(false);
-  const [resendStatus, setResendStatus] = useState<string | null>(null);
+  const { user, signOut, signOutEverywhere } = useAuth();
 
   if (!user) return null;
-
-  const handleResend = async () => {
-    setResending(true);
-    setResendStatus(null);
-    const ok = await resendVerificationEmail();
-    setResending(false);
-    if (ok) {
-      setResendStatus("Link dispatched!");
-      setTimeout(() => setResendStatus(null), 4000);
-    } else {
-      setResendStatus("Failed to resend");
-      setTimeout(() => setResendStatus(null), 4000);
-    }
-  };
 
   return (
     <DropdownMenu>
@@ -66,27 +49,6 @@ export function UserMenu({ onNavigate }: { onNavigate: (path: string) => void })
             </div>
           </div>
         </DropdownMenuLabel>
-
-        {/* VERIFICATION ALERT IF UNVERIFIED */}
-        {!user.emailVerified && (
-          <div className="p-2 my-1 bg-[var(--warning-soft)] text-[var(--ink)] rounded-sm border border-[var(--warning)] text-xs">
-            <div className="flex items-center gap-1 font-bold text-[var(--ink)] mb-1">
-              <Warning className="h-3.5 w-3.5 text-[var(--warning)]" weight="fill" />
-              <span>Email unverified</span>
-            </div>
-            <p className="text-[10px] text-[var(--ink-2)] leading-tight mb-1.5">
-              Confirm your email to post debates & vote.
-            </p>
-            <button
-              type="button"
-              onClick={handleResend}
-              disabled={resending}
-              className="w-full text-center text-[10px] font-extrabold bg-[var(--surface)] text-[var(--ink)] border border-[var(--ink)] rounded-pill py-0.5 hover:bg-[var(--sunken)] cursor-pointer"
-            >
-              {resending ? "Sending..." : resendStatus || "Resend confirmation email"}
-            </button>
-          </div>
-        )}
 
         {/* ACTIONS */}
         <div className="pt-1">

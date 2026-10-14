@@ -58,9 +58,11 @@ export function AccountView({ onNavigate }: { onNavigate: (path: string) => void
     setSavingEmail(false);
     if (result.success) {
       setEmailMessage(
-        import.meta.env.DEV
-          ? "Verification link created for your new address. Open it from the API terminal, then return here."
-          : "Check your new inbox for a verification link. Your current address stays active until you confirm it.",
+        user?.emailVerified
+          ? import.meta.env.DEV
+            ? "Open the email change link from the API terminal, then return here."
+            : "Check your new inbox to confirm the address change."
+          : "Email address updated.",
       );
     } else {
       setEmailError(result.error || "Could not change your email address.");
@@ -112,8 +114,7 @@ export function AccountView({ onNavigate }: { onNavigate: (path: string) => void
             Email address
           </h2>
           <p className="mt-1 text-sm text-[var(--ink-2)]">
-            Current: <strong>{user.email}</strong> ·{" "}
-            {user.emailVerified ? "Verified" : "Unverified"}
+            Current: <strong>{user.email}</strong>
           </p>
           <form onSubmit={saveEmail} className="mt-5 flex flex-col gap-3">
             <Label htmlFor="account-email">New email address</Label>
@@ -126,7 +127,9 @@ export function AccountView({ onNavigate }: { onNavigate: (path: string) => void
               required
             />
             <p className="text-xs text-[var(--ink-3)]">
-              We will send a verification link to the new address before switching it.
+              {user.emailVerified
+                ? "Changing a previously confirmed address requires a link to protect your account."
+                : "Your new address will be saved immediately."}
             </p>
             {emailError && <StatusMessage error>{emailError}</StatusMessage>}
             {emailMessage && <StatusMessage>{emailMessage}</StatusMessage>}
@@ -134,7 +137,7 @@ export function AccountView({ onNavigate }: { onNavigate: (path: string) => void
               type="submit"
               disabled={savingEmail || email.trim().toLowerCase() === user.email.toLowerCase()}
             >
-              {savingEmail ? "Sending…" : "Change email"}
+              {savingEmail ? "Saving…" : "Change email"}
             </Button>
           </form>
         </section>

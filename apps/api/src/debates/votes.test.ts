@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Server } from "node:http";
 import { prisma } from "@varroom/db/client";
 import { Debate, ErrorResponse, ListDebatesResponse } from "@varroom/shared";
-import { getLastEmail } from "../auth/email.ts";
 import { Fan, newFanDetails } from "../testing/fan.ts";
 import { startTestServer } from "../testing/server.ts";
 
@@ -41,9 +40,7 @@ async function newFan(confirmed: boolean): Promise<TestFan> {
   expect(signUp.status).toBe(200);
 
   if (confirmed) {
-    const email = getLastEmail(details.email);
-    expect(email).toBeDefined();
-    await fetch(email!.url, { redirect: "manual" });
+    await prisma.user.update({ where: { email: details.email }, data: { emailVerified: true } });
   }
 
   const user = await prisma.user.findUniqueOrThrow({ where: { email: details.email } });
@@ -173,7 +170,7 @@ describe.skipIf(!hasTestDatabase)("PUT /api/debates/:id/vote", () => {
     }
   });
 
-  test("no session answers 401, an unconfirmed email answers 403 EMAIL_NOT_VERIFIED", async () => {
+  test("no session answers 401, while an unconfirmed fan can vote", async () => {
     const { userId } = await newFan(true);
     const debateId = await insertDebate(userId);
 
@@ -184,8 +181,8 @@ describe.skipIf(!hasTestDatabase)("PUT /api/debates/:id/vote", () => {
 
     const { fan: unconfirmed } = await newFan(false);
     const unconfirmedResponse = await vote(unconfirmed, debateId, 1);
-    expect(unconfirmedResponse.status).toBe(403);
-    expect((await errorOf(unconfirmedResponse)).code).toBe("EMAIL_NOT_VERIFIED");
+    expect(unconfirmedResponse.status).toBe(200);
+    expect(Debate.parse(await unconfirmedResponse.json()).myVote).toBe(1);
   });
 
   test("a malformed or unknown debate id answers 404 with no row written", async () => {

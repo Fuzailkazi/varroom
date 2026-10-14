@@ -9,7 +9,7 @@ export const FieldError = z.object({
 // standard error response format for our api routes
 export const ErrorResponse = z.object({
   error: z.object({
-    code: z.string(), // stable error code (e.g., EMAIL_NOT_VERIFIED)
+    code: z.string(), // stable error code (e.g., UNAUTHENTICATED)
     message: z.string(), // human-readable message
     fields: z.array(FieldError).optional(), // only on VALIDATION_FAILED
     existingId: z.uuid().optional(), // only on DUPLICATE_DEBATE

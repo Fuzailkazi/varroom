@@ -25,7 +25,7 @@ import {
 import type { Request, Response } from "express";
 import { Router } from "express";
 import { z } from "zod";
-import { optionalSession, requireSession, requireVerified } from "../auth/guards.ts";
+import { optionalSession, requireSession } from "../auth/guards.ts";
 import { sendError } from "../errors.ts";
 import { validate } from "../validate.ts";
 import { toDebateResponse } from "./response.ts";
@@ -39,11 +39,11 @@ const Uuid = z.uuid();
 
 export function createDebatesRouter() {
   const router = Router();
-  router.post("/", requireVerified, createDebateHandler);
+  router.post("/", requireSession, createDebateHandler);
   router.get("/", optionalSession, listDebatesHandler);
   router.get("/:id", optionalSession, getDebateHandler);
   router.delete("/:id", requireSession, deleteDebateHandler);
-  router.put("/:id/vote", requireVerified, voteHandler);
+  router.put("/:id/vote", requireSession, voteHandler);
   return router;
 }
 
@@ -91,7 +91,7 @@ async function loadDebates(ids: string[], viewer: string | null): Promise<Debate
 // post /api/debates
 
 async function createDebateHandler(req: Request, res: Response) {
-  // requireVerified already ran, so signedIn is set and email is confirmed
+  // requireSession already ran, so signedIn is set
   const authorId = req.signedIn!.user.id;
 
   // 1. validate + clean body
@@ -226,7 +226,7 @@ async function getDebateHandler(req: Request, res: Response) {
 // delete /api/debates/:id
 
 async function deleteDebateHandler(req: Request, res: Response) {
-  // requireSession already ran. unverified users can still delete their own posts
+  // requireSession already ran, so signedIn is set
   const userId = req.signedIn!.user.id;
   const id = String(req.params.id);
 
@@ -254,7 +254,7 @@ async function deleteDebateHandler(req: Request, res: Response) {
 // put /api/debates/:id/vote
 
 async function voteHandler(req: Request, res: Response) {
-  // requireVerified already ran, so signedIn is set and email is confirmed
+  // requireSession already ran, so signedIn is set
   const userId = req.signedIn!.user.id;
   const id = String(req.params.id);
 

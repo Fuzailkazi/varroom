@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Server } from "node:http";
 import { prisma } from "@varroom/db/client";
 import { Comment, Debate, ErrorResponse, ListCommentsResponse } from "@varroom/shared";
-import { getLastEmail } from "../auth/email.ts";
 import { Fan, newFanDetails } from "../testing/fan.ts";
 import { startTestServer } from "../testing/server.ts";
 
@@ -29,7 +28,7 @@ afterAll(() => {
 
 type TestFan = { fan: Fan; userId: string; password: string };
 
-// signs up a fan. confirmed = also clicks the email link
+// signs up a fan. confirmed simulates an account verified before this change
 async function newFan(confirmed: boolean): Promise<TestFan> {
   const fan = new Fan(baseUrl);
   const details = newFanDetails();
@@ -37,9 +36,7 @@ async function newFan(confirmed: boolean): Promise<TestFan> {
   expect(signUp.status).toBe(200);
 
   if (confirmed) {
-    const email = getLastEmail(details.email);
-    expect(email).toBeDefined();
-    await fetch(email!.url, { redirect: "manual" });
+    await prisma.user.update({ where: { email: details.email }, data: { emailVerified: true } });
   }
 
   const user = await prisma.user.findUniqueOrThrow({ where: { email: details.email } });
@@ -177,9 +174,8 @@ describe.skipIf(!hasTestDatabase)("comments API", () => {
       expect((await errorOf(anonymous)).code).toBe("UNAUTHENTICATED");
 
       const unconfirmed = await newFan(false);
-      const blocked = await postComment(unconfirmed.fan, debateId, { body: "Hi there." });
-      expect(blocked.status).toBe(403);
-      expect((await errorOf(blocked)).code).toBe("EMAIL_NOT_VERIFIED");
+      const posted = await postComment(unconfirmed.fan, debateId, { body: "Hi there." });
+      expect(posted.status).toBe(201);
 
       const malformed = await postComment(author.fan, "abc", { body: "Hi there." });
       expect(malformed.status).toBe(404);

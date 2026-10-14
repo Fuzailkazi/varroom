@@ -8,7 +8,7 @@ import { getTrustedOrigins } from "../security/origin.ts";
 import type { SendEmail } from "./email.ts";
 
 // Better Auth does the hard parts of sign in for us: sign up, sign in,
-// sessions, email confirmation, password reset and account deletion
+// sessions, password reset and account deletion
 // Its routes live under /api/auth/*.
 
 const ONE_DAY_IN_SECONDS = 60 * 60 * 24;
@@ -131,7 +131,7 @@ export function createAuth(env: Env, sendEmail: SendEmail) {
     emailAndPassword: {
       enabled: true,
       autoSignIn: true, // Signing up also signs you in
-      requireEmailVerification: false, // Unconfirmed fans can still sign in and read
+      requireEmailVerification: false,
       minPasswordLength: 8,
       maxPasswordLength: 128,
       revokeSessionsOnPasswordReset: true, // A reset signs out every device
@@ -147,9 +147,13 @@ export function createAuth(env: Env, sendEmail: SendEmail) {
     },
 
     emailVerification: {
-      sendOnSignUp: true, // Send the confirmation link right away
+      // Kept for email changes on accounts that were verified previously.
+      sendOnSignUp: false,
 
       sendVerificationEmail: async ({ user, url }) => {
+        // Better Auth also calls this after an unverified fan changes their email.
+        // That change is immediate and needs no confirmation message.
+        if (!user.emailVerified) return;
         await sendEmail({
           to: user.email,
           subject: "Confirm your VAR Room email",
@@ -174,8 +178,9 @@ export function createAuth(env: Env, sendEmail: SendEmail) {
       },
       // Fans can delete their account (password rule in checkDeleteUser).
       deleteUser: { enabled: true },
-      // Email edits require a confirmation link sent to the new address.
-      changeEmail: { enabled: true },
+      // Fans with an unverified address can correct it immediately.
+      // Better Auth still confirms changes for previously verified accounts.
+      changeEmail: { enabled: true, updateEmailWithoutVerification: true },
     },
 
     session: {
