@@ -1,0 +1,1 @@
+ALTER TYPE "ClaimType" ADD VALUE 'OPINION';

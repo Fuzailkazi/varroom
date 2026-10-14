@@ -28,7 +28,7 @@ const rulingLabels: Record<ReviewClaim["verdict"], string> = {
   PARTIALLY_TRUE: "Partly true",
   REFUTED: "Contradicted",
   INSUFFICIENT_DATA: "Insufficient data",
-  UNTESTABLE: "Untestable",
+  UNTESTABLE: "No factual ruling",
 };
 
 function claimEvidence(claim: ReviewClaim, evidence: ReviewEvidence[]) {
@@ -162,7 +162,16 @@ export function ReviewView({ reviewId, initialTake, onBackToHome }: ReviewViewPr
 
   const running = review?.status === "QUEUED" || review?.status === "RUNNING";
   const verdict =
-    review?.status === "COMPLETE" ? review.decision || "INCONCLUSIVE" : "CHECK_INCOMPLETE";
+    review?.status === "COMPLETE"
+      ? review.credibilityScore === null &&
+        review.claims.some((claim) => claim.type === "OPINION" && claim.citedLabels.length > 0)
+        ? "CONTEXT_REVIEWED"
+        : review.credibilityScore === null &&
+            review.claims.length > 0 &&
+            review.claims.every((claim) => claim.type === "UNTESTABLE")
+          ? "NOT_CHECKABLE"
+          : review.decision || "INCONCLUSIVE"
+      : "CHECK_INCOMPLETE";
 
   async function shareDecision() {
     try {
@@ -309,7 +318,9 @@ export function ReviewView({ reviewId, initialTake, onBackToHome }: ReviewViewPr
                             CLAIM {String(claim.order).padStart(2, "0")}
                           </span>
                           <span className={`ruling ruling-${claim.verdict.toLowerCase()}`}>
-                            {rulingLabels[claim.verdict]}
+                            {claim.type === "OPINION" && claim.citedLabels.length > 0
+                              ? "Evidence reviewed"
+                              : rulingLabels[claim.verdict]}
                           </span>
                         </div>
                         <h3 className="mt-3 font-display text-lg font-bold leading-snug">
@@ -320,17 +331,23 @@ export function ReviewView({ reviewId, initialTake, onBackToHome }: ReviewViewPr
                             {claim.reasoning}
                           </p>
                         )}
-                        <button
-                          type="button"
-                          aria-expanded={open}
-                          onClick={() =>
-                            setOpenClaims((previous) => ({ ...previous, [claim.order]: !open }))
-                          }
-                          className="source-toggle"
-                        >
-                          <LinkSimple size={15} />{" "}
-                          {open ? "Hide sources" : `View sources (${sources.length})`}
-                        </button>
+                        {sources.length > 0 ? (
+                          <button
+                            type="button"
+                            aria-expanded={open}
+                            onClick={() =>
+                              setOpenClaims((previous) => ({ ...previous, [claim.order]: !open }))
+                            }
+                            className="source-toggle"
+                          >
+                            <LinkSimple size={15} />{" "}
+                            {open ? "Hide sources" : `View sources (${sources.length})`}
+                          </button>
+                        ) : (
+                          <p className="mt-4 text-xs text-[var(--ink-3)]">
+                            No cited sources for this claim.
+                          </p>
+                        )}
                         {open && (
                           <div className="source-list">
                             {sources.length === 0 ? (
@@ -392,8 +409,8 @@ export function ReviewView({ reviewId, initialTake, onBackToHome }: ReviewViewPr
               </span>
             </div>
             <p className="mt-7 border-t border-[var(--line)] pt-5 text-xs leading-relaxed text-[var(--ink-3)]">
-              The score is calculated from checked claims. Open each claim to inspect its cited
-              sources.
+              Factual claims determine the score. Opinions receive a cited context review without a
+              truth score. Open each claim to inspect its sources.
             </p>
             {review.status === "COMPLETE" && (
               <Button

@@ -452,6 +452,82 @@ describe("runPipeline — UNTESTABLE claims", () => {
   });
 });
 
+describe("runPipeline — evidence-backed opinions", () => {
+  test("researches a historical ranking, cites sources, and leaves the truth score empty", async () => {
+    const moderator = {
+      claims: [
+        {
+          order: 1,
+          claimText: "Real Madrid is the best team in the history of football",
+          type: "OPINION",
+          entities: { team: "Real Madrid" },
+        },
+      ],
+    };
+    const factChecker = {
+      verdicts: [],
+      contextualFindings: [
+        {
+          claimOrder: 1,
+          reasoning:
+            "Honours and records are relevant criteria, but choosing the best team depends on how those criteria are weighted.",
+          citedLabels: ["E1", "E2"],
+        },
+      ],
+    };
+    let searchedQuery = "";
+    const result = await runPipeline(moderator.claims[0]!.claimText, {
+      runAgentFn: makeRunAgentFn(moderator, factChecker),
+      searchWebFn: async (query) => {
+        searchedQuery = query;
+        return found([
+          { url: "https://uefa.com/madrid", title: "UEFA club records", publishedAt: null },
+          { url: "https://fifa.com/history", title: "FIFA club history", publishedAt: null },
+        ]);
+      },
+    });
+
+    expect(searchedQuery).toContain("Real Madrid");
+    expect(result.evidence).toHaveLength(2);
+    expect(result.claims[0]).toMatchObject({
+      type: "OPINION",
+      verdict: "UNTESTABLE",
+      citedLabels: ["E1", "E2"],
+    });
+    expect(result.claims[0]?.reasoning).toContain("not a provable fact");
+    expect(result.score).toBeNull();
+    expect(result.decision).toBe("INCONCLUSIVE");
+  });
+
+  test("rejects an opinion finding with an invented citation", async () => {
+    const moderator = {
+      claims: [
+        {
+          order: 1,
+          claimText: "Real Madrid is the best team ever",
+          type: "OPINION",
+          entities: { team: "Real Madrid" },
+        },
+      ],
+    };
+    const result = await runPipeline(moderator.claims[0]!.claimText, {
+      runAgentFn: makeRunAgentFn(moderator, {
+        verdicts: [],
+        contextualFindings: [
+          { claimOrder: 1, reasoning: "Invented support.", citedLabels: ["E99"] },
+        ],
+      }),
+      searchWebFn: makeSearchFn([
+        { url: "https://uefa.com/madrid", title: "UEFA club records", publishedAt: null },
+      ]),
+    });
+
+    expect(result.claims[0]?.verdict).toBe("INSUFFICIENT_DATA");
+    expect(result.claims[0]?.citedLabels).toEqual([]);
+    expect(result.score).toBeNull();
+  });
+});
+
 describe("runPipeline — score edge cases", () => {
   test("zero testable claims gives null score and INCONCLUSIVE", async () => {
     const moderator = {
@@ -975,9 +1051,9 @@ describe("runPipeline — at most 5 claims are searched", () => {
 
       const evidenceForClaim = result.evidence.filter((e) => e.args.claimOrder === order);
       expect(evidenceForClaim).toEqual([]);
-      expect(factCheckerInput).not.toContain(`Claim ${order}:`);
+      expect(factCheckerInput).not.toContain(`Claim ${order} [`);
     }
-    expect(factCheckerInput).toContain("Claim 6:");
+    expect(factCheckerInput).toContain("Claim 6 [POSITIONAL_ROLE]:");
     expect(result.claims.find((c) => c.order === 3)?.verdict).toBe("UNTESTABLE");
   });
 
@@ -1304,6 +1380,16 @@ describe("buildSearchQuery and low sample evidence", () => {
       entities: { player: "Gyokeres", team: "Arsenal" },
     };
     expect(buildSearchQuery(transfer)).toBe("Gyokeres Arsenal transfer fit stats analysis");
+
+    const opinion = {
+      order: 5,
+      claimText: "Real Madrid is the best team in history",
+      type: "OPINION" as const,
+      entities: { team: "Real Madrid" },
+    };
+    expect(buildSearchQuery(opinion)).toBe(
+      "Real Madrid football honours records statistics historical comparison",
+    );
   });
 
   test("detects small sample signals in source titles and urls", () => {

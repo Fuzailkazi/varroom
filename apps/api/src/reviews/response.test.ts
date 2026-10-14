@@ -234,6 +234,26 @@ describe("toReviewResponse", () => {
     expect(claim?.verdict).toBe("UNTESTABLE");
   });
 
+  test("a cited opinion keeps its sources and appears as a contextual review", () => {
+    const row = detailRow({
+      claims: [
+        claimRow({
+          type: "OPINION",
+          verdict: "PENDING",
+          reasoning: "This ranking depends on the criteria used.",
+          citedLabels: ["E1"],
+        }),
+      ],
+    });
+
+    const claim = toReviewResponse(row).review.claims[0];
+    expect(claim).toMatchObject({
+      type: "OPINION",
+      verdict: "UNTESTABLE",
+      citedLabels: ["E1"],
+    });
+  });
+
   test("a comparison claim keeps its type and entities", () => {
     const row = detailRow({
       claims: [

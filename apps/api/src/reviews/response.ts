@@ -152,9 +152,9 @@ type PublicEntities = {
 };
 
 function toClaim(claim: ReviewDetailClaim): ReviewClaim {
-  // untestable claims stay PENDING in the db, show them as UNTESTABLE
+  // opinion and untestable claims stay PENDING in the db; neither gets a fact verdict
   let verdict: PublicVerdict = claim.verdict;
-  if (claim.type === "UNTESTABLE") {
+  if (claim.type === "UNTESTABLE" || (claim.type === "OPINION" && claim.verdict === "PENDING")) {
     verdict = "UNTESTABLE";
   }
 

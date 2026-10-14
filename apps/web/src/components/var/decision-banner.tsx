@@ -7,6 +7,8 @@ export type DecisionVerdict =
   | "OVERTURNED"
   | "CHECK_INCOMPLETE"
   | "INCONCLUSIVE"
+  | "CONTEXT_REVIEWED"
+  | "NOT_CHECKABLE"
   | "IN_PROGRESS";
 
 export interface DecisionBannerProps {
@@ -44,6 +46,16 @@ export function DecisionBanner({
     CHECK_INCOMPLETE: {
       label: "Check incomplete",
       heading: "No clear ruling yet.",
+      tone: "incomplete",
+    },
+    CONTEXT_REVIEWED: {
+      label: "Evidence reviewed",
+      heading: "The sources inform this opinion, but cannot prove a single winner.",
+      tone: "incomplete",
+    },
+    NOT_CHECKABLE: {
+      label: "No factual ruling",
+      heading: "This take has no claim that evidence can settle as written.",
       tone: "incomplete",
     },
     IN_PROGRESS: { label: "Live VAR check", heading: "The review is underway.", tone: "running" },
