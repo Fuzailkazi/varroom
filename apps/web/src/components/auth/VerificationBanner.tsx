@@ -18,11 +18,15 @@ export function VerificationBanner({ onNavigate }: { onNavigate: (path: string) 
     if (ok) {
       setStatus(
         import.meta.env.DEV
-          ? "Verification link printed in the API terminal. Check that the address below is correct."
+          ? "A new verification link was printed in the API terminal. No email was sent."
           : "Confirmation email dispatched! Check your spam folder if it doesn't arrive in 60s.",
       );
     } else {
-      setStatus("Failed to send verification email. Please try again shortly.");
+      setStatus(
+        import.meta.env.DEV
+          ? "Could not print a new verification link. Please try again shortly."
+          : "Failed to send verification email. Please try again shortly.",
+      );
     }
   };
 
@@ -35,10 +39,13 @@ export function VerificationBanner({ onNavigate }: { onNavigate: (path: string) 
             Email verification required for debate submissions & voting
           </p>
           <p className="text-xs text-[var(--ink-2)] mt-0.5">
+            Account email: <strong className="text-[var(--ink)]">{user.email}</strong>
+          </p>
+          <p className="text-xs text-[var(--ink-2)] mt-0.5">
             {status ||
               (import.meta.env.DEV
-                ? `Development mode: the verification link for ${user.email} is printed in the API terminal. Posting stays paused until you open it.`
-                : `We sent a link to ${user.email}. Reading is unlocked, but write permissions remain paused.`)}
+                ? "Development mode prints verification links in the API terminal; no email is sent. Posting stays paused until you open the link."
+                : "We sent a link to your account email. Reading is unlocked, but write permissions remain paused.")}
           </p>
         </div>
       </div>
@@ -55,7 +62,13 @@ export function VerificationBanner({ onNavigate }: { onNavigate: (path: string) 
           disabled={resending}
           className="text-xs font-bold border-[var(--ink)] bg-[var(--surface)] hover:bg-[var(--sunken)]"
         >
-          {resending ? "Sending..." : "Resend Link →"}
+          {resending
+            ? import.meta.env.DEV
+              ? "Printing..."
+              : "Sending..."
+            : import.meta.env.DEV
+              ? "Print new link →"
+              : "Resend email →"}
         </Button>
       </div>
     </div>
