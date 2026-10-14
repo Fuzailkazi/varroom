@@ -8,6 +8,7 @@ export function buildSummary(claims: ClaimResult[]): string {
   let overturned = 0;
   let notChecked = 0;
   let notTestable = 0;
+  let opinionsExplored = 0;
 
   for (const claim of claims) {
     if (claim.verdict === "VERIFIED") {
@@ -18,6 +19,8 @@ export function buildSummary(claims: ClaimResult[]): string {
       overturned++;
     } else if (claim.verdict === "INSUFFICIENT_DATA") {
       notChecked++;
+    } else if (claim.type === "OPINION" && claim.verdict === "UNTESTABLE") {
+      opinionsExplored++;
     } else if (claim.verdict === "UNTESTABLE") {
       notTestable++;
     }
@@ -36,6 +39,11 @@ export function buildSummary(claims: ClaimResult[]): string {
   }
   if (notChecked > 0) {
     parts.push(`${notChecked} couldn't be checked`);
+  }
+  if (opinionsExplored > 0) {
+    parts.push(
+      `${opinionsExplored} opinion${opinionsExplored === 1 ? "" : "s"} explored with evidence`,
+    );
   }
   if (notTestable > 0) {
     parts.push(`${notTestable} not testable`);

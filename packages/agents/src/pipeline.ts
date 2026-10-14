@@ -181,6 +181,11 @@ export function buildSearchQuery(claim: Claim): string {
     return `${target} ${club} transfer fit stats analysis`.trim();
   }
 
+  if (claim.type === "OPINION") {
+    const subject = team || player || playerA || claim.claimText;
+    return `${subject} football honours records statistics historical comparison`.trim();
+  }
+
   return `${claim.claimText} stats`;
 }
 
@@ -412,10 +417,12 @@ A claim is TEAM_TACTIC when it asserts facts or stats about a team's tactical sy
 
 A claim is TRANSFER_FIT when it asserts whether a player fits a potential new club's system or stats (e.g. "Gyokeres fits Arsenal's style better than Chelsea").
 
-Every other claim — subjective hot takes, referee controversies, feelings, passion, unmatched vibes — is UNTESTABLE.
+A claim is OPINION when it makes a subjective ranking or evaluation of a football team, player, or manager that can be explored using factual records but has no single objective truth (e.g. "Real Madrid is the best team in football history", "Messi is the greatest player ever", "Guardiola is overrated"). Keep the claim as stated; do not rewrite "best" into a narrower factual claim.
+
+Personal feelings, mystical qualities, and unsupported allegations of intent or corruption are UNTESTABLE (e.g. "I love Madrid", "the Bernabeu has magical energy", "UEFA secretly rigged the match").
 
 For each claim:
-- Set type to POSITIONAL_ROLE, COMPARISON, TEAM_TACTIC, TRANSFER_FIT, or UNTESTABLE.
+- Set type to POSITIONAL_ROLE, COMPARISON, TEAM_TACTIC, TRANSFER_FIT, OPINION, or UNTESTABLE.
 - Extract relevant entities: player, playerA, playerB, positionA, positionB, team, manager, metric.
 - Order claims by their appearance in the text starting from 1.`,
     outputSchema: ModeratorOutput,
@@ -536,15 +543,16 @@ For each claim:
   const claimsWithEvidence = new Set(usableEvidence.map((e) => e.args.claimOrder));
 
   // fact checker: only sees claims that have usable evidence
-  const testableClaims = parsedClaims.filter(
+  const reviewableClaims = parsedClaims.filter(
     (c) => c.type !== "UNTESTABLE" && claimsWithEvidence.has(c.order),
   );
 
   let verdicts: FactCheckerOutput["verdicts"] = [];
+  let contextualFindings: FactCheckerOutput["contextualFindings"] = [];
 
-  if (testableClaims.length > 0) {
-    const claimsContext = testableClaims
-      .map((c) => `Claim ${c.order}: "${c.claimText}"`)
+  if (reviewableClaims.length > 0) {
+    const claimsContext = reviewableClaims
+      .map((c) => `Claim ${c.order} [${c.type}]: "${c.claimText}"`)
       .join("\n");
 
     const evidenceContext = usableEvidence
@@ -559,7 +567,7 @@ For each claim:
       model,
       instruction: `You are a football fact-checker. You are given claims and a numbered evidence list.
 
-For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite only evidence labels from the list. Each label shows which claim it was gathered for — only cite a label for the claim it belongs to. Never invent evidence or cite labels not in the list.`,
+For factual claims, return a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) in verdicts. For OPINION claims, return a contextualFinding instead: explain which objective criteria the available sources can inform, what supports the opinion and what limits it where the sources permit, and why there is no definitive factual verdict. Do not put OPINION claims in verdicts. Do not claim a specific record or number unless it appears in the evidence list. Cite only evidence labels from the list, and only labels belonging to that claim. Never invent evidence or cite labels not in the list.`,
       outputSchema: FactCheckerOutput,
     });
 
@@ -574,6 +582,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
       );
       const parsed = FactCheckerOutput.parse(JSON.parse(reply.text));
       verdicts = parsed.verdicts;
+      contextualFindings = parsed.contextualFindings;
     } catch (err) {
       if (err instanceof ReviewStoppedError) {
         throw err;
@@ -587,6 +596,7 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
 
   // build the final claim results, checking every citation
   const verdictMap = new Map(verdicts.map((v) => [v.claimOrder, v]));
+  const findingMap = new Map(contextualFindings.map((finding) => [finding.claimOrder, finding]));
 
   const evidenceRecords: EvidenceRecord[] = evidenceEntries.map((e) => ({
     label: e.label,
@@ -633,6 +643,45 @@ For each claim, give a verdict (VERIFIED, PARTIALLY_TRUE, or REFUTED) and cite o
         verdict: "INSUFFICIENT_DATA",
         reasoning: "No usable evidence was found for this claim.",
         citedLabels: [],
+        confidence: null,
+      };
+    }
+
+    if (claim.type === "OPINION") {
+      const finding = findingMap.get(claim.order);
+      if (!finding) {
+        return {
+          order: claim.order,
+          claimText: claim.claimText,
+          entities: claim.entities,
+          type: claim.type,
+          verdict: "INSUFFICIENT_DATA",
+          reasoning: "The review could not explain the available evidence for this opinion.",
+          citedLabels: [],
+          confidence: null,
+        };
+      }
+      const citationCheck = validateCitations(finding.citedLabels, claim.order, evidenceRecords);
+      if (!citationCheck.ok) {
+        return {
+          order: claim.order,
+          claimText: claim.claimText,
+          entities: claim.entities,
+          type: claim.type,
+          verdict: "INSUFFICIENT_DATA",
+          reasoning: "The review could not verify the cited sources for this opinion.",
+          citedLabels: [],
+          confidence: null,
+        };
+      }
+      return {
+        order: claim.order,
+        claimText: claim.claimText,
+        entities: claim.entities,
+        type: claim.type,
+        verdict: "UNTESTABLE",
+        reasoning: `This is a judgment, not a provable fact. ${finding.reasoning}`,
+        citedLabels: citationCheck.validLabels,
         confidence: null,
       };
     }

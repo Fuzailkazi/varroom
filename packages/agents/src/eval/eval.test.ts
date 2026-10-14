@@ -23,6 +23,7 @@ describe("golden eval dataset", () => {
           "COMPARISON",
           "TEAM_TACTIC",
           "TRANSFER_FIT",
+          "OPINION",
           "UNTESTABLE",
         ]).toContain(claim.type);
       }
@@ -35,6 +36,7 @@ describe("golden eval dataset", () => {
     expect(categories.has("COMPARISON")).toBe(true);
     expect(categories.has("TEAM_TACTIC")).toBe(true);
     expect(categories.has("TRANSFER_FIT")).toBe(true);
+    expect(categories.has("OPINION")).toBe(true);
     expect(categories.has("UNTESTABLE")).toBe(true);
     expect(categories.has("MIXED")).toBe(true);
   });
@@ -127,5 +129,16 @@ describe("runEvaluation runner", () => {
     expect(report.totalDebates).toBe(1);
     expect(report.debates[0]?.id).toBe("golden-03");
     expect(report.debates[0]?.category).toBe("COMPARISON");
+  });
+
+  test("reviews the historical ranking without a factual score", async () => {
+    const report = await runEvaluation({ mode: "mock", singleId: "golden-22" });
+
+    expect(report.debates[0]).toMatchObject({
+      category: "OPINION",
+      decision: "INCONCLUSIVE",
+      score: null,
+      validCitations: 1,
+    });
   });
 });

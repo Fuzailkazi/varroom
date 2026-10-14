@@ -70,8 +70,15 @@ function createMockRunner(debate: GoldenDebate) {
           reasoning: "Verified against grounded statistics.",
           citedLabels: [`E${c.order}`],
         }));
+      const contextualFindings = debate.expectedClaims
+        .filter((c) => c.type === "OPINION")
+        .map((c) => ({
+          claimOrder: c.order,
+          reasoning: "Records offer context, but the ranking depends on how fans weigh them.",
+          citedLabels: [`E${c.order}`],
+        }));
       return {
-        text: JSON.stringify({ verdicts }),
+        text: JSON.stringify({ verdicts, contextualFindings }),
         usage: { inputTokens: 420, outputTokens: 85, thinkingTokens: 0 },
       };
     }

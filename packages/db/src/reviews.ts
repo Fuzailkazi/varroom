@@ -126,7 +126,13 @@ export type FinishedEvidence = {
 export type FinishedClaim = {
   order: number;
   claimText: string;
-  type: "POSITIONAL_ROLE" | "UNTESTABLE" | "COMPARISON" | "TEAM_TACTIC" | "TRANSFER_FIT";
+  type:
+    | "POSITIONAL_ROLE"
+    | "UNTESTABLE"
+    | "OPINION"
+    | "COMPARISON"
+    | "TEAM_TACTIC"
+    | "TRANSFER_FIT";
   entities: unknown;
   // PENDING for untestable claims, they're never judged
   verdict: "PENDING" | "VERIFIED" | "PARTIALLY_TRUE" | "REFUTED" | "INSUFFICIENT_DATA";
@@ -302,7 +308,13 @@ export async function getReviewState(reviewId: string): Promise<ReviewStateRow |
 export type ReviewDetailClaim = {
   order: number;
   claimText: string;
-  type: "POSITIONAL_ROLE" | "UNTESTABLE" | "COMPARISON" | "TEAM_TACTIC" | "TRANSFER_FIT";
+  type:
+    | "POSITIONAL_ROLE"
+    | "UNTESTABLE"
+    | "OPINION"
+    | "COMPARISON"
+    | "TEAM_TACTIC"
+    | "TRANSFER_FIT";
   entities: unknown;
   verdict: "PENDING" | "VERIFIED" | "PARTIALLY_TRUE" | "REFUTED" | "INSUFFICIENT_DATA";
   reasoning: string | null;

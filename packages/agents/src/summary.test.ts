@@ -46,6 +46,11 @@ describe("buildSummary", () => {
     expect(summary).toBe("1 claim: 1 partly stands");
   });
 
+  test("describes cited opinions without calling them verified", () => {
+    const opinion = { ...claimWith("UNTESTABLE"), type: "OPINION" as const, citedLabels: ["E1"] };
+    expect(buildSummary([opinion])).toBe("1 claim: 1 opinion explored with evidence");
+  });
+
   test("handles a review with no claims at all", () => {
     expect(buildSummary([])).toBe("0 claims");
   });

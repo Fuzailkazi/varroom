@@ -21,12 +21,29 @@ export type GoldenDebate = {
     | "COMPARISON"
     | "TEAM_TACTIC"
     | "TRANSFER_FIT"
+    | "OPINION"
     | "MIXED"
     | "UNTESTABLE";
 };
 
-// 21 real football debate opinions covering multiple leagues, clubs, and claim types.
+// Real football debate opinions covering multiple leagues, clubs, and claim types.
 export const GOLDEN_DEBATES: GoldenDebate[] = [
+  {
+    id: "golden-22",
+    title: "Real Madrid is the best team in the history of football",
+    thesis: "Real Madrid is the best team in the history of football.",
+    category: "OPINION",
+    roughExpectedVerdict: "INCONCLUSIVE",
+    expectedClaims: [
+      {
+        order: 1,
+        claimText: "Real Madrid is the best team in the history of football",
+        type: "OPINION",
+        testable: false,
+        expectedVerdict: "UNTESTABLE",
+      },
+    ],
+  },
   {
     id: "golden-01",
     title: "Jude Bellingham is more effective as a false 9 than as an 8",

@@ -6,6 +6,7 @@ import { z } from "zod";
 // COMPARISON = player vs player comparison (e.g. "player A scores more than player B")
 // TEAM_TACTIC = team tactical system or stats (e.g. "team X press higher under manager Y")
 // TRANSFER_FIT = player fit or suitability for a club
+// OPINION = evaluative ranking with factual evidence to explore, but no objective truth score
 // UNTESTABLE = subjective opinion or non-falsifiable hot take
 
 export const ClaimType = z.enum([
@@ -13,6 +14,7 @@ export const ClaimType = z.enum([
   "COMPARISON",
   "TEAM_TACTIC",
   "TRANSFER_FIT",
+  "OPINION",
   "UNTESTABLE",
 ]);
 export type ClaimType = z.infer<typeof ClaimType>;
@@ -58,6 +60,15 @@ export const FactCheckerOutput = z.object({
       citedLabels: z.array(z.string()), // e.g. ["E1", "E3"]
     }),
   ),
+  contextualFindings: z
+    .array(
+      z.object({
+        claimOrder: z.number().int(),
+        reasoning: z.string().min(1),
+        citedLabels: z.array(z.string()),
+      }),
+    )
+    .default([]),
 });
 
 export type FactCheckerOutput = z.infer<typeof FactCheckerOutput>;
