@@ -6,7 +6,7 @@ import express from "express";
 import { createAdminRouter } from "./admin/routes.ts";
 import { createAuth } from "./auth/auth.ts";
 import { createSendEmail } from "./auth/email.ts";
-import { requireSession, requireVerified } from "./auth/guards.ts";
+import { requireSession } from "./auth/guards.ts";
 import { createCommentsRouter, createDebateCommentsRouter } from "./comments/routes.ts";
 import { createDebatesRouter, listTagsHandler } from "./debates/routes.ts";
 import type { Env } from "./env.ts";
@@ -74,7 +74,7 @@ export function createApp(
   // A stand in for the real write routes (posting, voting) until
   // they exist. Only added while running tests.
   if (env.NODE_ENV === "test") {
-    app.post("/api/_test/verified-ping", requireVerified, (_req, res) => {
+    app.post("/api/_test/session-ping", requireSession, (_req, res) => {
       res.json({ ok: true });
     });
   }

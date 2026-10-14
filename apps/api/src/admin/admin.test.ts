@@ -4,7 +4,6 @@ import type { NewAiCall } from "@varroom/db";
 import { recordAiCall } from "@varroom/db";
 import { prisma } from "@varroom/db/client";
 import { AdminReviewTraceResponse, ErrorResponse } from "@varroom/shared";
-import { getLastEmail } from "../auth/email.ts";
 import { Fan, newFanDetails } from "../testing/fan.ts";
 import { startTestServer } from "../testing/server.ts";
 
@@ -40,16 +39,12 @@ afterAll(async () => {
 
 type TestFan = { fan: Fan; userId: string };
 
-// a signed in fan with a confirmed email
+// a signed in fan
 async function newFan(): Promise<TestFan> {
   const fan = new Fan(baseUrl);
   const details = newFanDetails();
   const signUp = await fan.call("/api/auth/sign-up/email", { body: details });
   expect(signUp.status).toBe(200);
-
-  const email = getLastEmail(details.email);
-  expect(email).toBeDefined();
-  await fetch(email!.url, { redirect: "manual" });
 
   const user = await prisma.user.findUniqueOrThrow({ where: { email: details.email } });
   return { fan: fan, userId: user.id };

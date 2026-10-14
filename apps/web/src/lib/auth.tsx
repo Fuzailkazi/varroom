@@ -30,7 +30,6 @@ export interface AuthContextValue {
   loading: boolean;
   error: string | null;
   isAuthenticated: boolean;
-  isVerified: boolean;
   signIn: (identifier: string, password: string) => Promise<AuthResult>;
   signUp: (params: {
     name: string;
@@ -44,7 +43,6 @@ export interface AuthContextValue {
   changeEmail: (email: string) => Promise<AuthResult>;
   requestPasswordReset: (email: string) => Promise<AuthResult>;
   resetPassword: (token: string, newPassword: string) => Promise<AuthResult>;
-  resendVerificationEmail: () => Promise<boolean>;
   refreshUser: () => Promise<AuthUser | null>;
 }
 
@@ -264,6 +262,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!res.ok) {
         return { success: false, error: normalizeAuthError(await res.json().catch(() => null)) };
       }
+      await refreshUser();
       return { success: true };
     } catch (err) {
       return { success: false, error: normalizeAuthError(err) };
@@ -334,21 +333,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const resendVerificationEmail = async (): Promise<boolean> => {
-    if (!user?.email) return false;
-    try {
-      const res = await fetch("/api/auth/send-verification-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email: user.email }),
-      });
-      return res.ok;
-    } catch {
-      return false;
-    }
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -356,7 +340,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         error,
         isAuthenticated: !!user,
-        isVerified: !!user?.emailVerified,
         signIn,
         signUp,
         signOut,
@@ -365,7 +348,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         changeEmail,
         requestPasswordReset,
         resetPassword,
-        resendVerificationEmail,
         refreshUser,
       }}
     >

@@ -16,7 +16,7 @@ import {
 import type { Request, Response } from "express";
 import { Router } from "express";
 import { z } from "zod";
-import { requireSession, requireVerified } from "../auth/guards.ts";
+import { requireSession } from "../auth/guards.ts";
 import { toAuthorResponse } from "../debates/response.ts";
 import { sendError } from "../errors.ts";
 import { validate } from "../validate.ts";
@@ -29,7 +29,7 @@ const Uuid = z.uuid();
 // mounted at /api/debates/:id/comments. mergeParams lets us read :id from the mount path
 export function createDebateCommentsRouter() {
   const router = Router({ mergeParams: true });
-  router.post("/", requireVerified, createCommentHandler);
+  router.post("/", requireSession, createCommentHandler);
   router.get("/", listCommentsHandler);
   return router;
 }
@@ -58,7 +58,7 @@ function isUuid(value: string): boolean {
 
 // post /api/debates/:id/comments
 async function createCommentHandler(req: Request, res: Response) {
-  // requireVerified already ran, so signedIn is set
+  // requireSession already ran, so signedIn is set
   const authorId = req.signedIn!.user.id;
   const debateId = String(req.params.id);
 
@@ -150,7 +150,7 @@ async function listCommentsHandler(req: Request, res: Response) {
 
 // delete /api/comments/:id
 async function deleteCommentHandler(req: Request, res: Response) {
-  // requireSession already ran. unverified fans can still delete their own
+  // requireSession already ran, so signedIn is set
   const userId = req.signedIn!.user.id;
   const id = String(req.params.id);
 

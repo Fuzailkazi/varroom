@@ -3,7 +3,6 @@ import type { Server } from "node:http";
 import { prisma } from "@varroom/db/client";
 import { seedTags } from "@varroom/db/seed";
 import { Debate, ErrorResponse, ListDebatesResponse, ListTagsResponse } from "@varroom/shared";
-import { getLastEmail } from "../auth/email.ts";
 import { Fan, newFanDetails } from "../testing/fan.ts";
 import { startTestServer } from "../testing/server.ts";
 
@@ -37,7 +36,7 @@ type TestFan = {
   password: string;
 };
 
-// signs up a fan. confirmed = also clicks the email link
+// signs up a fan. confirmed simulates an account verified before this change
 async function newFan(confirmed: boolean): Promise<TestFan> {
   const fan = new Fan(baseUrl);
   const details = newFanDetails();
@@ -46,9 +45,7 @@ async function newFan(confirmed: boolean): Promise<TestFan> {
   expect(signUp.status).toBe(200);
 
   if (confirmed) {
-    const email = getLastEmail(details.email);
-    expect(email).toBeDefined();
-    await fetch(email!.url, { redirect: "manual" });
+    await prisma.user.update({ where: { email: details.email }, data: { emailVerified: true } });
   }
 
   const user = await prisma.user.findUniqueOrThrow({ where: { email: details.email } });
@@ -298,11 +295,11 @@ describe.skipIf(!hasTestDatabase)("debates API", () => {
       expect((await errorOf(response)).code).toBe("UNAUTHENTICATED");
     });
 
-    test("an unconfirmed email answers 403 EMAIL_NOT_VERIFIED", async () => {
+    test("an unconfirmed fan can post", async () => {
       const { fan } = await newFan(false);
       const response = await postDebate(fan, debateBody());
-      expect(response.status).toBe(403);
-      expect((await errorOf(response)).code).toBe("EMAIL_NOT_VERIFIED");
+      expect(response.status).toBe(201);
+      expect(Debate.parse(await response.json()).author.username).toBeDefined();
     });
 
     test("another website's origin answers 403 BAD_ORIGIN, even with broken JSON", async () => {

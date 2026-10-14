@@ -9,7 +9,7 @@ export type ErrorExtras = {
 };
 
 // Every error our own routes send looks the same:
-//   { "error": { "code": "EMAIL_NOT_VERIFIED", "message": "Confirm your email first." } }
+//   { "error": { "code": "UNAUTHENTICATED", "message": "Sign in first." } }
 // "code" is for programs (it never changes), "message" is for people.
 export function sendError(
   res: Response,

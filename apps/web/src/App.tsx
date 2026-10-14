@@ -1,7 +1,6 @@
 import { ArrowRight, Moon, Sun, Television } from "@phosphor-icons/react";
 import { HealthResponse } from "@varroom/shared";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { VerificationBanner } from "@/components/auth/VerificationBanner";
 import { UserMenu } from "@/components/nav/UserMenu";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
@@ -73,10 +72,6 @@ export function App() {
       navigate("/sign-in?returnTo=%2F");
       return;
     }
-    if (!user.emailVerified) {
-      setSubmitError("Confirm your email before posting. Check the address in the banner above.");
-      return;
-    }
     if (take.length < 30 || take.length > 1000) {
       setSubmitError("Write a specific take between 30 and 1000 characters.");
       return;
@@ -97,11 +92,6 @@ export function App() {
       if (!debateResponse.ok) {
         const body = await debateResponse.json().catch(() => null);
         const code = body?.error?.code;
-        if (code === "EMAIL_NOT_VERIFIED") {
-          throw new Error(
-            "Confirm your email before posting. Check the address in the banner above.",
-          );
-        }
         if (code === "UNAUTHENTICATED") {
           throw new Error("Your session expired. Sign in again to post your take.");
         }
@@ -204,7 +194,6 @@ export function App() {
         </div>
       </header>
 
-      <VerificationBanner onNavigate={navigate} />
       <Suspense
         fallback={
           <div className="mx-auto max-w-[1180px] px-4 py-16 text-sm text-[var(--ink-2)]">

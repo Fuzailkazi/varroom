@@ -6,9 +6,9 @@ import type { Auth } from "./auth.ts";
 // Guards are Express middleware that run before a route. They either
 // let the request through (by calling next()) or answer with an error.
 // Reading never needs a guard. Every write route (post, vote, comment)
-// uses requireVerified, like this:
+// uses requireSession, like this:
 //
-//   app.post("/api/debates", requireVerified, createDebateHandler);
+//   app.post("/api/debates", requireSession, createDebateHandler);
 
 // What Better Auth gives back for a signed in fan: { user, session }.
 export type SignedIn = Auth["$Infer"]["Session"];
@@ -56,25 +56,6 @@ export async function requireSession(req: Request, res: Response, next: NextFunc
   const signedIn = await getSignedIn(req);
   if (!signedIn) {
     sendError(res, 401, "UNAUTHENTICATED", "Sign in first.");
-    return;
-  }
-  next();
-}
-
-// Signed in AND the email is confirmed.
-export async function requireVerified(req: Request, res: Response, next: NextFunction) {
-  const signedIn = await getSignedIn(req);
-  if (!signedIn) {
-    sendError(res, 401, "UNAUTHENTICATED", "Sign in first.");
-    return;
-  }
-  if (!signedIn.user.emailVerified) {
-    sendError(
-      res,
-      403,
-      "EMAIL_NOT_VERIFIED",
-      "Confirm your email first. Check your inbox for the link.",
-    );
     return;
   }
   next();

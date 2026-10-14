@@ -109,8 +109,8 @@ describe("auth validation utilities", () => {
 
   describe("normalizeAuthError", () => {
     test("normalizes custom Express error shape", () => {
-      const err = { error: { code: "EMAIL_NOT_VERIFIED", message: "Confirm your email." } };
-      expect(normalizeAuthError(err)).toBe("Confirm your email.");
+      const err = { error: { code: "UNAUTHENTICATED", message: "Sign in first." } };
+      expect(normalizeAuthError(err)).toBe("Sign in first.");
     });
 
     test("normalizes Better Auth error shape", () => {

@@ -19,7 +19,7 @@ import {
 import type { Request, Response } from "express";
 import { Router } from "express";
 import { z } from "zod";
-import { requireVerified } from "../auth/guards.ts";
+import { requireSession } from "../auth/guards.ts";
 import { sendError } from "../errors.ts";
 import type { RateLimits } from "../security/rateLimit.ts";
 import { createPerMinuteLimiter } from "../security/rateLimit.ts";
@@ -36,7 +36,7 @@ const MAX_STREAM_MS = REVIEW_TIMEOUT_MS + 60 * 1000; // no stream outlives its r
 // post /api/debates/:id/reviews. limits: the fan cap and the daily gemini budget
 export function createStartReviewRouter(runner: ReviewRunner, limits: UsageLimits) {
   const router = Router({ mergeParams: true });
-  router.post("/", requireVerified, async (req: Request, res: Response) => {
+  router.post("/", requireSession, async (req: Request, res: Response) => {
     await startReviewHandler(req, res, runner, limits);
   });
   return router;
@@ -97,7 +97,7 @@ async function startReviewHandler(
   runner: ReviewRunner,
   limits: UsageLimits,
 ) {
-  // requireVerified already ran, so signedIn is set and email is confirmed
+  // requireSession already ran, so signedIn is set
   const userId = req.signedIn!.user.id;
   const isAdmin = req.signedIn!.user.role === "ADMIN";
   const debateId = String(req.params.id);

@@ -16,7 +16,6 @@ import {
   ReviewResponse,
   StartReviewResponse,
 } from "@varroom/shared";
-import { getLastEmail } from "../auth/email.ts";
 import { Fan, newFanDetails } from "../testing/fan.ts";
 import { startTestServer } from "../testing/server.ts";
 import type { StreamMessage } from "./response.ts";
@@ -167,9 +166,7 @@ async function newFan(url: string, confirmed: boolean): Promise<TestFan> {
   expect(signUp.status).toBe(200);
 
   if (confirmed) {
-    const email = getLastEmail(details.email);
-    expect(email).toBeDefined();
-    await fetch(email!.url, { redirect: "manual" });
+    await prisma.user.update({ where: { email: details.email }, data: { emailVerified: true } });
   }
 
   const user = await prisma.user.findUniqueOrThrow({ where: { email: details.email } });
@@ -378,7 +375,7 @@ describe.skipIf(!hasTestDatabase)("POST /api/debates/:id/reviews", () => {
     await waitUntilEnded(body.review.id);
   });
 
-  test("signed out, unverified and unknown debates are refused", async () => {
+  test("signed out and unknown debates are refused; unverified fans can start reviews", async () => {
     const verified = await newFan(baseUrl, true);
     const unverified = await newFan(baseUrl, false);
     const debateId = await insertDebate(verified.userId);
@@ -387,8 +384,7 @@ describe.skipIf(!hasTestDatabase)("POST /api/debates/:id/reviews", () => {
     expect(anonymous.status).toBe(401);
 
     const notConfirmed = await startReview(unverified.fan, debateId);
-    expect(notConfirmed.status).toBe(403);
-    expect((await errorOf(notConfirmed)).code).toBe("EMAIL_NOT_VERIFIED");
+    expect(notConfirmed.status).toBe(202);
 
     const unknown = await startReview(verified.fan, crypto.randomUUID());
     expect(unknown.status).toBe(404);
